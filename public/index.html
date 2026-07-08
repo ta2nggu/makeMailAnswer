@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Mail Assistant</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- CSS Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+  <!-- Lucide Icons for nice UI icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <div class="app-container">
+    
+    <!-- Left Sidebar: Mail List -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <i data-lucide="mail" class="logo-icon"></i>
+          <span>AI Mail</span>
+        </div>
+        <button id="btn-refresh" class="btn-icon" title="메일 새로고침">
+          <i data-lucide="rotate-cw" id="refresh-icon"></i>
+        </button>
+      </div>
+      <div class="search-container">
+        <div class="search-box">
+          <i data-lucide="search" class="search-icon"></i>
+          <input type="text" id="search-input" placeholder="메일 검색..." autocomplete="off">
+          <button id="btn-clear-search" class="btn-clear-search hidden" title="검색어 지우기">
+            <i data-lucide="x"></i>
+          </button>
+        </div>
+      </div>
+      <div class="sidebar-content">
+        <div id="mail-list" class="mail-list">
+          <div class="loading-state">
+            <div class="spinner"></div>
+            <p>메일 사서함을 읽는 중...</p>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Section: Mail Reader & AI Assistant -->
+    <main class="main-content">
+      
+      <!-- Welcome Panel (Shown when no mail is selected) -->
+      <div id="welcome-panel" class="welcome-panel">
+        <div class="welcome-box">
+          <i data-lucide="inbox" class="welcome-icon"></i>
+          <h2>AI 메일 작성 어시스턴트</h2>
+          <p>사서함에서 메일을 선택하여 AI를 통해 맞춤형 회신 메일을 작성해보세요.</p>
+          <button id="btn-welcome-refresh" class="btn-primary">
+            <i data-lucide="refresh-cw"></i> 메일 불러오기
+          </button>
+        </div>
+      </div>
+
+      <!-- Workspace Panel (Split layout when a mail is selected) -->
+      <div id="workspace-panel" class="workspace-panel hidden">
+        
+        <!-- Left Workspace: Original Mail Viewer -->
+        <section class="original-mail-section">
+          <div class="section-header">
+            <div class="header-title">
+              <i data-lucide="book-open"></i>
+              <span>받은 메일 확인</span>
+            </div>
+          </div>
+          <div class="mail-detail-card">
+            <div class="mail-detail-header">
+              <h2 id="detail-subject">제목 없음</h2>
+              <div class="mail-meta">
+                <div class="meta-row">
+                  <span class="meta-label">보낸 사람:</span>
+                  <span id="detail-from" class="meta-value"></span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-label">받는 사람:</span>
+                  <span id="detail-to" class="meta-value"></span>
+                </div>
+                <div class="meta-row">
+                  <span class="meta-label">받은 시간:</span>
+                  <span id="detail-date" class="meta-value"></span>
+                </div>
+              </div>
+            </div>
+            <div class="mail-detail-body">
+              <div id="mail-body-text" class="mail-body-text"></div>
+              <iframe id="mail-body-html" class="mail-body-html hidden"></iframe>
+            </div>
+          </div>
+        </section>
+
+        <!-- Drag Resizer Divider -->
+        <div id="workspace-resizer" class="workspace-resizer"></div>
+
+        <!-- Right Workspace: AI Copilot & Editor -->
+        <section class="ai-assistant-section">
+          <div class="section-header">
+            <div class="header-title">
+              <i data-lucide="sparkles" class="text-gradient"></i>
+              <span>AI 답장 어시스턴트</span>
+            </div>
+          </div>
+
+          <!-- Tabs Navigation -->
+          <div class="ai-tabs">
+            <button id="tab-reply" class="tab-button active">
+              <i data-lucide="message-square-plus"></i>
+              <span>답장 작성</span>
+            </button>
+            <button id="tab-chat" class="tab-button">
+              <i data-lucide="messages-square"></i>
+              <span>메일 Q&A 챗</span>
+            </button>
+          </div>
+
+          <!-- Tab Panel 1: Reply Draft (Current workflow) -->
+          <div id="panel-reply" class="tab-panel">
+            <!-- Phase 1: Input Guide -->
+            <div class="ai-box">
+              <div class="ai-box-header">
+                <span class="ai-badge">답변 가이드 입력</span>
+              </div>
+              <div class="ai-box-content">
+                <label for="reply-guide">답장하고 싶은 요점을 간단히 적어주세요:</label>
+                <textarea id="reply-guide" placeholder="예: 상대방이 제안한 24일 미팅 일정을 수락하고, 장소는 우리 회사 미팅룸 302호에서 보자고 전해줘."></textarea>
+                <button id="btn-generate" class="btn-generate">
+                  <i data-lucide="sparkles"></i> AI로 정중한 답장 생성
+                </button>
+              </div>
+            </div>
+
+            <!-- Phase 2: Draft Output (Hidden until generated) -->
+            <div id="draft-box" class="ai-box draft-box disabled">
+              <div class="ai-box-header">
+                <span class="ai-badge active">생성된 답장 초안</span>
+                <div class="draft-actions">
+                  <button id="btn-copy" class="btn-text-icon" title="복사하기">
+                    <i data-lucide="copy"></i> 복사
+                  </button>
+                </div>
+              </div>
+              <div class="ai-box-content">
+                <div class="draft-field-container">
+                  <span class="field-label">받는 사람:</span>
+                  <input type="text" id="draft-to" placeholder="수신자 이메일 주소" />
+                </div>
+                <div class="draft-field-container">
+                  <span class="field-label">참조 (Cc):</span>
+                  <input type="text" id="draft-cc" placeholder="참조자 이메일 주소 (선택사항, 콤마 구분)" />
+                </div>
+                <div class="draft-field-container">
+                  <span class="field-label">제목:</span>
+                  <input type="text" id="draft-subject" placeholder="생성된 제목" />
+                </div>
+                <textarea id="draft-body" placeholder="AI가 생성한 메일 본문이 여기에 표시되며, 직접 수정할 수도 있습니다."></textarea>
+                
+                <div class="draft-send-row">
+                  <button id="btn-send-mail" class="btn-send">
+                    <i data-lucide="send"></i> 이 메일 바로 답장하기 (SMTP)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tab Panel 2: Mail Q&A Chat -->
+          <div id="panel-chat" class="tab-panel hidden">
+            <div class="chat-container">
+              <div id="chat-messages" class="chat-messages">
+                <div class="chat-message system">
+                  <i data-lucide="sparkles" class="chat-avatar-icon"></i>
+                  <div class="message-bubble">
+                    안녕하세요! 선택된 메일에 대해 궁금한 점을 편하게 물어보세요. 요약, 의도 파악, 어려운 단어 풀이 등을 도와드릴 수 있습니다.
+                  </div>
+                </div>
+              </div>
+              <div class="chat-input-row">
+                <input type="text" id="chat-input" placeholder="이 메일에 대해 궁금한 점을 질문해보세요..." autocomplete="off">
+                <button id="btn-chat-send" class="btn-chat-send">
+                  <i data-lucide="send"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+      </div>
+    </main>
+
+  </div>
+
+  <!-- Toast Notification System -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- JS Implementation -->
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+{
+  "name": "ai-mail-assistant",
+  "version": "1.0.0",
+  "description": "KT Biz Office POP3/SMTP and Gemini AI Mail Assistant",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.24.1",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "mailparser": "^3.7.1",
+    "nodemailer": "^6.9.13"
+  }
+}
