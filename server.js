@@ -329,7 +329,7 @@ Instructions:
 
 감사합니다.
 
-로젠택배 정보전략팀 김태영 책임 02-3415-8984 / taeyoung@ilogen.com
+로젠택배 정보전략팀 김태영 책임
 
 4. Output ONLY the reply email subject (prefixed with "Re: ") and the structured reply body.
 5. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.
