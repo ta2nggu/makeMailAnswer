@@ -23,7 +23,21 @@ document.addEventListener('DOMContentLoaded', () => {
   initSplitPane(); // Activate resizable splitter
   
   // Bind Event Listeners
-  document.getElementById('btn-refresh').addEventListener('click', () => fetchEmails(false, true));
+  const btnRefresh = document.getElementById('btn-refresh');
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', () => {
+      const currentIcon = document.getElementById('refresh-icon');
+      if (currentIcon) {
+        currentIcon.classList.remove('spin-once');
+        void currentIcon.offsetWidth; // Force reflow to restart animation if clicked repeatedly
+        currentIcon.classList.add('spin-once');
+        currentIcon.addEventListener('animationend', () => {
+          currentIcon.classList.remove('spin-once');
+        }, { once: true });
+      }
+      fetchEmails(false, true);
+    });
+  }
   document.getElementById('btn-welcome-refresh').addEventListener('click', () => fetchEmails(false));
   document.getElementById('btn-generate').addEventListener('click', generateAIDraft);
   document.getElementById('btn-copy').addEventListener('click', copyDraftToClipboard);
@@ -176,7 +190,6 @@ async function fetchEmails(append = false, forceRefresh = false) {
     // Reset paging state on manual refresh or welcome reload
     currentPage = 1;
     emailsList = [];
-    if (refreshIcon) refreshIcon.classList.add('spinning');
     if (refreshBtn) refreshBtn.disabled = true;
 
     const loadingMessage = searchQuery ? '메일을 검색하는 중...' : 'KT Biz Office 사서함을 읽는 중...';
@@ -242,7 +255,6 @@ async function fetchEmails(append = false, forceRefresh = false) {
     }
   } finally {
     isLoadingMore = false;
-    if (refreshIcon) refreshIcon.classList.remove('spinning');
     if (refreshBtn) refreshBtn.disabled = false;
   }
 }

@@ -731,6 +731,10 @@ textarea:focus {
   animation: spin 0.8s linear infinite;
 }
 
+.spin-once {
+  animation: spin 0.8s ease-in-out;
+}
+
 /* Toast Notifications */
 .toast-container {
   position: fixed;
