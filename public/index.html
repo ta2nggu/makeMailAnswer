@@ -16,18 +16,32 @@
 <body>
   <div class="app-container">
     
-    <!-- Left Sidebar: Mail List -->
+    <!-- Left Sidebar: Mail List & Navigation -->
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="logo">
-          <i data-lucide="mail" class="logo-icon"></i>
-          <span>AI Mail</span>
+          <i data-lucide="sparkles" class="logo-icon"></i>
+          <span>AI Workspace</span>
         </div>
         <button id="btn-refresh" class="btn-icon" title="메일 새로고침">
           <i data-lucide="rotate-cw" id="refresh-icon"></i>
         </button>
       </div>
-      <div class="search-container">
+
+      <!-- Mode Selector Tabs -->
+      <div class="sidebar-mode-tabs">
+        <button id="mode-mail" class="sidebar-mode-btn active">
+          <i data-lucide="mail"></i>
+          <span>이메일</span>
+        </button>
+        <button id="mode-messenger" class="sidebar-mode-btn">
+          <i data-lucide="message-square"></i>
+          <span>메신저 답장</span>
+        </button>
+      </div>
+
+      <!-- Email Mode: Search -->
+      <div class="search-container" id="mail-search-container">
         <div class="search-box">
           <i data-lucide="search" class="search-icon"></i>
           <input type="text" id="search-input" placeholder="메일 검색..." autocomplete="off">
@@ -36,11 +50,29 @@
           </button>
         </div>
       </div>
-      <div class="sidebar-content">
+
+      <!-- Email Mode: Sidebar List -->
+      <div class="sidebar-content" id="mail-sidebar-content">
         <div id="mail-list" class="mail-list">
           <div class="loading-state">
             <div class="spinner"></div>
             <p>메일 사서함을 읽는 중...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Messenger Mode: Sidebar Tips -->
+      <div class="sidebar-content hidden" id="messenger-sidebar-content">
+        <div class="sidebar-helper-box">
+          <div class="helper-icon-wrap">
+            <i data-lucide="info" class="helper-icon"></i>
+          </div>
+          <h3>메신저 답변 팁</h3>
+          <p>사내 메신저는 메일에 비해 즉각적이며 친근한 표현이 주로 쓰입니다.</p>
+          <p>대화 상대의 최근 메시지 뉘앙스(의도, 요구 사항)를 AI가 정밀 분석하여 적절한 답변의 방향과 실용적인 톤앤매너를 추천합니다.</p>
+          <div class="example-history-tips">
+            <strong>💡 붙여넣기 팁:</strong>
+            <p>대화 창의 메시지를 드래그(복사)하여 메인 창에 붙여넣기만 하시면 됩니다. <code>[이름] [시간]</code> 형식이 섞여 있어도 인공지능이 알아서 정제하여 분석합니다.</p>
           </div>
         </div>
       </div>
@@ -193,6 +225,84 @@
 
         </section>
 
+      </div>
+
+      <!-- Messenger Mode Panel (Shown when mode-messenger is active) -->
+      <div id="messenger-panel" class="messenger-panel hidden">
+        <div class="messenger-layout">
+          
+          <!-- Left: Input Area -->
+          <div class="messenger-col-input">
+            <div class="section-header">
+              <div class="header-title">
+                <i data-lucide="message-square" class="text-gradient"></i>
+                <span>메신저 내용 및 요점 입력</span>
+              </div>
+            </div>
+
+            <div class="ai-box">
+              <div class="ai-box-header">
+                <span class="ai-badge active">1. 메신저 대화 복사 붙여넣기</span>
+              </div>
+              <div class="ai-box-content">
+                <label for="messenger-chat-history">대화 내역을 메신저에서 복사하여 아래에 붙여넣으세요:</label>
+                <textarea id="messenger-chat-history" placeholder="[예시]&#10;2026-07-15 10:23 [양진영] 책임님 관련 내용 메일로 회신주실 수 있으실까요?&#10;중요한 사안이다 보니 메일로 회신주시면 저희쪽 의견 정리해서 회신드리도록 하겠습니다!"></textarea>
+              </div>
+            </div>
+
+            <div class="ai-box">
+              <div class="ai-box-header">
+                <span class="ai-badge active">2. 답변할 키워드 / 요점</span>
+              </div>
+              <div class="ai-box-content">
+                <label for="messenger-keywords">답변에 포함하고 싶은 키워드나 하고 싶은 말을 간략히 입력하세요:</label>
+                <textarea id="messenger-keywords" placeholder="예: 메일로 발송하겠다고 답변, 오늘 오후 중 보낼 예정"></textarea>
+                
+                <button id="btn-generate-messenger" class="btn-generate">
+                  <i data-lucide="sparkles"></i> AI 메신저 조언 및 답장 생성
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Divider -->
+          <div class="messenger-divider"></div>
+
+          <!-- Right: Output Area -->
+          <div class="messenger-col-output">
+            <div class="section-header">
+              <div class="header-title">
+                <i data-lucide="lightbulb" style="color: var(--accent-secondary)"></i>
+                <span>AI 커뮤니케이션 조언 & 답장 초안</span>
+              </div>
+            </div>
+
+            <!-- AI Advice Box -->
+            <div class="ai-box">
+              <div class="ai-box-header">
+                <span class="ai-badge active">AI 상황 분석 및 커뮤니케이션 조언</span>
+              </div>
+              <div class="ai-box-content">
+                <div id="messenger-advice-content" class="messenger-advice-text">
+                  대화 내용과 요점을 입력한 뒤 왼편의 <strong>'AI 메신저 조언 및 답장 생성'</strong> 버튼을 클릭하면, 여기에 실시간 피드백과 조언이 표시됩니다.
+                </div>
+              </div>
+            </div>
+
+            <!-- Recommended Replies Box -->
+            <div class="ai-box messenger-replies-box">
+              <div class="ai-box-header">
+                <span class="ai-badge active">추천 답장 초안 (톤별 제공)</span>
+              </div>
+              <div class="ai-box-content" id="messenger-replies-list">
+                <div class="empty-state-text">
+                  여기에 어조별 추천 답장 템플릿이 표시됩니다. 클릭하여 편리하게 복사해보세요.
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
       </div>
     </main>
 

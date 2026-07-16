@@ -105,6 +105,20 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
   }
+
+  // Bind Workspace Mode Toggle (Email vs Messenger)
+  const modeMailBtn = document.getElementById('mode-mail');
+  const modeMessengerBtn = document.getElementById('mode-messenger');
+  if (modeMailBtn && modeMessengerBtn) {
+    modeMailBtn.addEventListener('click', () => switchWorkspaceMode('mail'));
+    modeMessengerBtn.addEventListener('click', () => switchWorkspaceMode('messenger'));
+  }
+
+  // Bind Messenger Advice Generation
+  const btnGenerateMessenger = document.getElementById('btn-generate-messenger');
+  if (btnGenerateMessenger) {
+    btnGenerateMessenger.addEventListener('click', generateMessengerAdvice);
+  }
 });
 
 // Resizable Split Pane Logic
@@ -741,4 +755,154 @@ function formatChatText(text) {
   formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
   formatted = formatted.replace(/\n/g, '<br>');
   return formatted;
+}
+
+// Switch workspace between Email and Messenger mode
+let currentMode = 'mail'; // 'mail' or 'messenger'
+function switchWorkspaceMode(mode) {
+  if (currentMode === mode) return;
+  currentMode = mode;
+
+  const modeMailBtn = document.getElementById('mode-mail');
+  const modeMessengerBtn = document.getElementById('mode-messenger');
+  const mailSearchContainer = document.getElementById('mail-search-container');
+  const mailSidebarContent = document.getElementById('mail-sidebar-content');
+  const messengerSidebarContent = document.getElementById('messenger-sidebar-content');
+  const messengerPanel = document.getElementById('messenger-panel');
+  const welcomePanel = document.getElementById('welcome-panel');
+  const workspacePanel = document.getElementById('workspace-panel');
+  const btnRefresh = document.getElementById('btn-refresh');
+
+  if (mode === 'mail') {
+    modeMailBtn.classList.add('active');
+    modeMessengerBtn.classList.remove('active');
+    mailSearchContainer.classList.remove('hidden');
+    mailSidebarContent.classList.remove('hidden');
+    messengerSidebarContent.classList.add('hidden');
+    messengerPanel.classList.add('hidden');
+    if (btnRefresh) btnRefresh.classList.remove('hidden');
+
+    // Restore mail view depending on selection
+    if (selectedEmail) {
+      workspacePanel.classList.remove('hidden');
+      welcomePanel.classList.add('hidden');
+    } else {
+      welcomePanel.classList.remove('hidden');
+      workspacePanel.classList.add('hidden');
+    }
+  } else {
+    modeMessengerBtn.classList.add('active');
+    modeMailBtn.classList.remove('active');
+    mailSearchContainer.classList.add('hidden');
+    mailSidebarContent.classList.add('hidden');
+    messengerSidebarContent.classList.remove('hidden');
+    messengerPanel.classList.remove('hidden');
+    welcomePanel.classList.add('hidden');
+    workspacePanel.classList.add('hidden');
+    if (btnRefresh) btnRefresh.classList.add('hidden');
+  }
+  lucide.createIcons();
+}
+
+// Generate Messenger Advice & Recommended Replies
+async function generateMessengerAdvice() {
+  const chatHistoryText = document.getElementById('messenger-chat-history').value.trim();
+  const keywordsText = document.getElementById('messenger-keywords').value.trim();
+  const generateBtn = document.getElementById('btn-generate-messenger');
+  const adviceContent = document.getElementById('messenger-advice-content');
+  const repliesList = document.getElementById('messenger-replies-list');
+
+  if (!chatHistoryText && !keywordsText) {
+    showToast('대화 내역이나 답변 키워드 중 최소 하나는 입력해주세요.', 'error');
+    return;
+  }
+
+  // Loading UI state
+  const originalBtnHtml = generateBtn.innerHTML;
+  generateBtn.disabled = true;
+  generateBtn.innerHTML = `<div class="spinner" style="width:16px; height:16px; border-width:2px; display:inline-block; margin-right:8px;"></div> AI 답변 분석 중...`;
+  
+  adviceContent.innerHTML = `
+    <div class="loading-state" style="padding: 1.5rem 0;">
+      <div class="spinner"></div>
+      <p>대화의 맥락을 분석하고 조언을 생성하는 중...</p>
+    </div>
+  `;
+
+  repliesList.innerHTML = `
+    <div class="loading-state" style="padding: 1.5rem 0;">
+      <div class="spinner"></div>
+      <p>맞춤형 답변 초안들을 작성하고 있습니다...</p>
+    </div>
+  `;
+
+  try {
+    const response = await fetch('/api/generate-messenger-reply', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        chatHistory: chatHistoryText,
+        keywords: keywordsText
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '답변 생성에 실패했습니다.');
+    }
+
+    // Render Advice
+    adviceContent.innerHTML = formatChatText(data.analysis || '조언이 없습니다.');
+
+    // Render Replies
+    repliesList.innerHTML = '';
+    const replies = data.replies || [];
+
+    if (replies.length === 0) {
+      repliesList.innerHTML = `<div class="empty-state-text">추천 답변 초안이 없습니다.</div>`;
+    } else {
+      replies.forEach((reply, idx) => {
+        const replyItem = document.createElement('div');
+        replyItem.className = 'messenger-reply-item';
+        
+        replyItem.innerHTML = `
+          <div class="reply-item-header">
+            <span class="reply-item-label">${reply.label || `옵션 ${idx + 1}`}</span>
+            <button class="btn-copy-reply" data-text="${reply.text.replace(/"/g, '&quot;')}">
+              <i data-lucide="copy"></i> 복사
+            </button>
+          </div>
+          <div class="reply-item-content">${formatChatText(reply.text)}</div>
+        `;
+        
+        // Add Copy listener
+        const copyBtn = replyItem.querySelector('.btn-copy-reply');
+        copyBtn.addEventListener('click', () => {
+          navigator.clipboard.writeText(reply.text)
+            .then(() => {
+              showToast(`'${reply.label}' 텍스트가 복사되었습니다!`, 'success');
+            })
+            .catch(err => {
+              console.error(err);
+              showToast('복사에 실패했습니다.', 'error');
+            });
+        });
+
+        repliesList.appendChild(replyItem);
+      });
+    }
+
+  } catch (error) {
+    console.error(error);
+    showToast(error.message, 'error');
+    adviceContent.innerHTML = `<p style="color: var(--accent-danger)">오류: ${error.message}</p>`;
+    repliesList.innerHTML = `<p style="color: var(--accent-danger); text-align: center; padding: 2rem;">답변을 불러오지 못했습니다.</p>`;
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.innerHTML = originalBtnHtml;
+    lucide.createIcons();
+  }
 }

@@ -398,6 +398,86 @@ ${originalEmail.text || originalEmail.html}
   }
 });
 
+// API: Generate messenger reply and advice using Gemini AI
+app.post('/api/generate-messenger-reply', async (req, res) => {
+  const { chatHistory, keywords } = req.body;
+
+  if (!genAI) {
+    return res.status(400).json({ error: 'Gemini API Key is missing or invalid. Please check your .env file.' });
+  }
+
+  if (!chatHistory && !keywords) {
+    return res.status(400).json({ error: '대화 내역이나 답변 키워드 중 최소 하나는 입력해 주세요.' });
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-3.5-flash' });
+
+    const prompt = `
+당신은 사내 메신저 대화 분석 및 답변 작성을 돕는 비즈니스 커뮤니케이션 코치입니다.
+사용자가 대화 내역(chatHistory)과 답변하고 싶은 키워드/의도(keywords)를 제공하면, 다음 보낼 메신저 답장을 작성하고 이에 대한 조언을 제공해야 합니다.
+
+[사용자가 제공한 대화 내역]
+${chatHistory || '(이전 대화 내역 없음 - 상대방에게 처음 대화를 선제적으로 건네는 상황입니다.)'}
+
+[사용자가 원하는 답변 키워드 및 의도]
+${keywords || '(특별히 지정된 키워드 없음. 대화 맥락에 따라 가장 자연스러운 답변 작성)'}
+
+지침:
+1. 대화 내역(chatHistory)이 주어졌다면 맥락을 분석하여 상대방의 소속/이름/직급에 맞는 답변을 제안하세요.
+2. 대화 내역(chatHistory)이 비어있다면, 대화가 없는 상태에서 선제적으로 상대방에게 대화를 시작(첫 인사 및 용건 제시)하는 상황입니다. [사용자가 원하는 답변 키워드 및 의도]에 담긴 용건을 바탕으로 자연스럽고 정중하게 말을 거는 메시지를 제안하세요.
+3. 사용자가 입력한 [답변 키워드 및 의도]를 메신저 대화에 적절한 어조로 구체화하여 답변 초안들을 작성하세요.
+4. 메신저는 이메일보다 비교적 즉각적이고 짧은 호흡으로 진행되므로, 지나치게 길거나 이메일 양식(예: 서명 등)을 강제하지 말고 자연스러운 메신저 어조로 작성해 주세요.
+5. 조언(analysis) 영역에서는 상황을 요약 분석하고 대화 시 주의해야 할 비즈니스 매너 또는 팁을 설명해 주세요. (한국어로 작성)
+6. 답변 초안(replies)은 총 3가지 스타일로 제안해 주세요:
+   - "격식있고 정중한 답변" (상급자나 격식이 필요한 상대)
+   - "부드럽고 친근한 답변" (동료나 친밀한 협업 담당자)
+   - "간결하고 신속한 답변" (빠른 피드백이 필요한 상황)
+7. 반드시 JSON 형식으로만 응답해야 하며, 그 외의 텍스트나 마크다운 코드 블록(\`\`\`json)은 포함하지 마십시오.
+
+반환할 JSON 구조:
+{
+  "analysis": "여기에 현재 상황 분석 및 메신저 대화 팁을 작성하세요 (줄바꿈은 \\n 사용)",
+  "replies": [
+    {
+      "label": "격식있고 정중한 답변",
+      "text": "실제 전송할 메신저 메시지 텍스트"
+    },
+    {
+      "label": "부드럽고 친근한 답변",
+      "text": "실제 전송할 메신저 메시지 텍스트"
+    },
+    {
+      "label": "간결하고 신속한 답변",
+      "text": "실제 전송할 메신저 메시지 텍스트"
+    }
+  ]
+}
+`;
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text().trim();
+
+    // Clean up potential markdown formatting block
+    if (text.startsWith('```json')) {
+      text = text.substring(7);
+    } else if (text.startsWith('```')) {
+      text = text.substring(3);
+    }
+    if (text.endsWith('```')) {
+      text = text.substring(0, text.length - 3);
+    }
+    text = text.trim();
+
+    const replyData = JSON.parse(text);
+    res.json(replyData);
+  } catch (error) {
+    console.error('Gemini Messenger AI Error:', error);
+    res.status(500).json({ error: `AI Draft Generation Error: ${error.message}` });
+  }
+});
+
 // API: Send email (SMTP)
 app.post('/api/send-reply', async (req, res) => {
   const { to, cc, subject, body } = req.body;
