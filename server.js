@@ -31,7 +31,8 @@ const getPop3Config = () => {
 
 const fs = require('fs');
 const CACHE_FILE = path.join(__dirname, 'mail_cache.json');
-const MAX_CACHE = 500;
+let maxCacheSize = 500;
+let totalServerMailsCount = 0;
 const SYNC_THROTTLE_MS = 15000; // 15 seconds
 
 let pop3Lock = Promise.resolve();
@@ -111,9 +112,10 @@ async function syncMailbox(force = false) {
 
   // Sort newest to oldest (msgNum descending)
   uidlMails.sort((a, b) => b.msgNum - a.msgNum);
+  totalServerMailsCount = uidlMails.length;
 
-  // Keep only the latest MAX_CACHE
-  const targetMails = uidlMails.slice(0, MAX_CACHE);
+  // Keep targetMails up to maxCacheSize
+  const targetMails = uidlMails.slice(0, maxCacheSize);
 
   // Helper to rebuild active list from cache
   const rebuildList = () => {
@@ -138,8 +140,8 @@ async function syncMailbox(force = false) {
   const missingMails = targetMails.filter(item => !emailCache[item.uniqueId]);
 
   if (missingMails.length > 0 && !isSyncingBackground) {
-    // If cache is empty or has very few items, fetch first 50 synchronously for immediate response
-    const syncImmediatelyCount = cachedMailList.length === 0 ? Math.min(50, missingMails.length) : 0;
+    // If cache has missing items, fetch first batch (up to 50) synchronously if user is waiting
+    const syncImmediatelyCount = cachedMailList.length < 50 ? Math.min(50, missingMails.length) : 0;
 
     if (syncImmediatelyCount > 0) {
       console.log(`Syncing ${syncImmediatelyCount} mails synchronously...`);
@@ -216,6 +218,35 @@ async function syncMailbox(force = false) {
   return cachedMailList;
 }
 
+// API: Expand or set mail cache limit
+app.post('/api/emails/load-more-server', async (req, res) => {
+  try {
+    const amount = req.body.amount;
+    const targetSize = req.body.targetSize;
+    
+    if (targetSize === 'all') {
+      maxCacheSize = Math.max(totalServerMailsCount || 5000, 5000);
+    } else if (targetSize) {
+      maxCacheSize = parseInt(targetSize, 10);
+    } else {
+      maxCacheSize += parseInt(amount || '500', 10);
+    }
+    
+    console.log(`Updated maxCacheSize to ${maxCacheSize}`);
+    const allEmails = await syncMailbox(true);
+    res.json({
+      success: true,
+      maxCacheSize,
+      serverTotalCount: totalServerMailsCount,
+      cachedCount: allEmails.length,
+      isSyncing: isSyncingBackground
+    });
+  } catch (error) {
+    console.error('Failed to load more from server:', error);
+    res.status(500).json({ error: `Failed to fetch more emails from POP3 server: ${error.message}` });
+  }
+});
+
 // API: Get recent email list
 app.get('/api/emails', async (req, res) => {
   const page = parseInt(req.query.page || '1', 10);
@@ -244,7 +275,9 @@ app.get('/api/emails', async (req, res) => {
       page,
       limit,
       emails: paginatedEmails,
-      isSyncing: isSyncingBackground
+      isSyncing: isSyncingBackground,
+      serverTotalCount: totalServerMailsCount,
+      maxCacheSize
     });
   } catch (error) {
     console.error('POP3 API Error:', error);

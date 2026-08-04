@@ -40,7 +40,7 @@
         </button>
       </div>
 
-      <!-- Email Mode: Search -->
+      <!-- Email Mode: Search & Mail Sync Control -->
       <div class="search-container" id="mail-search-container">
         <div class="search-box">
           <i data-lucide="search" class="search-icon"></i>
@@ -48,6 +48,26 @@
           <button id="btn-clear-search" class="btn-clear-search hidden" title="검색어 지우기">
             <i data-lucide="x"></i>
           </button>
+        </div>
+        
+        <!-- Top Sync Range Bar -->
+        <div class="sync-range-bar">
+          <div class="sync-info-text" title="현재 캐싱된 메일 수 / 서버 메일 전체 수">
+            <i data-lucide="database"></i>
+            <span id="sync-status-text">동기화 500개 / 서버 --개</span>
+          </div>
+          <div class="sync-actions">
+            <select id="select-fetch-limit" class="sync-select" title="동기화 한도 선택">
+              <option value="500">500개</option>
+              <option value="1000">1,000개</option>
+              <option value="2000">2,000개</option>
+              <option value="5000">5,000개</option>
+              <option value="all">전체</option>
+            </select>
+            <button id="btn-top-load-more" class="btn-top-sync" title="서버에서 +500개 더 불러오기">
+              <i data-lucide="cloud-download"></i> +500
+            </button>
+          </div>
         </div>
       </div>
 

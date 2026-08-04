@@ -3,6 +3,8 @@ let selectedEmail = null;
 let emailsList = [];
 let currentPage = 1;
 let totalMailCount = 0;
+let serverTotalCount = 0;
+let currentMaxCacheSize = 500;
 const limitPerPage = 10;
 let isLoadingMore = false;
 let searchQuery = '';
@@ -119,6 +121,19 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnGenerateMessenger) {
     btnGenerateMessenger.addEventListener('click', generateMessengerAdvice);
   }
+
+  // Bind Top Sync Control Bar Events
+  const btnTopLoadMore = document.getElementById('btn-top-load-more');
+  const selectFetchLimit = document.getElementById('select-fetch-limit');
+  if (btnTopLoadMore) {
+    btnTopLoadMore.addEventListener('click', () => loadMoreFromServer({ amount: 500 }));
+  }
+  if (selectFetchLimit) {
+    selectFetchLimit.addEventListener('change', (e) => {
+      const val = e.target.value;
+      loadMoreFromServer({ targetSize: val });
+    });
+  }
 });
 
 // Resizable Split Pane Logic
@@ -195,7 +210,7 @@ async function fetchEmails(append = false, forceRefresh = false) {
 
   if (append) {
     isLoadingMore = true;
-    const loadMoreBtn = document.getElementById('btn-load-more');
+    const loadMoreBtn = document.getElementById('btn-load-more') || document.getElementById('btn-load-more-server');
     if (loadMoreBtn) {
       loadMoreBtn.disabled = true;
       loadMoreBtn.innerHTML = `<div class="spinner" style="width:14px; height:14px; border-width:2px;"></div> 불러오는 중...`;
@@ -232,6 +247,8 @@ async function fetchEmails(append = false, forceRefresh = false) {
     }
 
     totalMailCount = data.count || 0;
+    serverTotalCount = data.serverTotalCount || totalMailCount;
+    currentMaxCacheSize = data.maxCacheSize || 500;
     const newEmails = data.emails || [];
 
     if (append) {
@@ -239,6 +256,9 @@ async function fetchEmails(append = false, forceRefresh = false) {
     } else {
       emailsList = newEmails;
     }
+
+    // Update Top Sync Bar Status Text & Select Dropdown
+    updateTopSyncBar();
 
     renderMailList(emailsList);
     
@@ -251,7 +271,7 @@ async function fetchEmails(append = false, forceRefresh = false) {
       if (searchQuery) {
         showToast(`검색 조건에 맞는 메일을 ${totalMailCount}개 찾았습니다.`, 'success');
       } else {
-        showToast(`성공적으로 메일 목록을 가져왔습니다. (총 ${totalMailCount}개)`, 'success');
+        showToast(`성공적으로 메일 목록을 가져왔습니다. (총 ${totalMailCount}개 / 서버 ${serverTotalCount}개)`, 'success');
       }
     }
   } catch (error) {
@@ -270,6 +290,66 @@ async function fetchEmails(append = false, forceRefresh = false) {
   } finally {
     isLoadingMore = false;
     if (refreshBtn) refreshBtn.disabled = false;
+  }
+}
+
+// Update Top Sync Control Bar Display
+function updateTopSyncBar() {
+  const syncStatusText = document.getElementById('sync-status-text');
+  const selectFetchLimit = document.getElementById('select-fetch-limit');
+
+  if (syncStatusText) {
+    if (searchQuery) {
+      syncStatusText.textContent = `검색: ${totalMailCount}개 (서버 ${serverTotalCount}개)`;
+    } else {
+      syncStatusText.textContent = `동기화: ${totalMailCount}개 / 서버 ${serverTotalCount > 0 ? serverTotalCount + '개' : '--개'}`;
+    }
+  }
+
+  if (selectFetchLimit) {
+    // Check if select has exact matching value
+    const match = Array.from(selectFetchLimit.options).find(opt => opt.value === String(currentMaxCacheSize));
+    if (match) {
+      selectFetchLimit.value = String(currentMaxCacheSize);
+    }
+  }
+}
+
+// Fetch more emails from server (supports amount or targetSize)
+async function loadMoreFromServer(options = { amount: 500 }) {
+  const btnTop = document.getElementById('btn-top-load-more');
+  const btnBottom = document.getElementById('btn-load-more-server');
+  const selectFetchLimit = document.getElementById('select-fetch-limit');
+
+  if (btnTop) btnTop.disabled = true;
+  if (btnBottom) btnBottom.disabled = true;
+
+  try {
+    const targetLabel = options.targetSize === 'all' ? '전체' : (options.targetSize ? `${options.targetSize}개` : `${options.amount || 500}개`);
+    showToast(`메일 서버에서 ${targetLabel} 메일을 동기화하고 있습니다...`, 'info');
+
+    const response = await fetch('/api/emails/load-more-server', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(options)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+      throw new Error(data.error || '서버 동기화에 실패했습니다.');
+    }
+
+    currentMaxCacheSize = data.maxCacheSize;
+    serverTotalCount = data.serverTotalCount;
+    showToast(`메일 한도가 ${data.maxCacheSize}개로 확장되었습니다. 메일을 불러옵니다.`, 'success');
+
+    // Reload emails from page 1 or append
+    await fetchEmails(false, true);
+  } catch (err) {
+    console.error(err);
+    showToast(err.message, 'error');
+  } finally {
+    if (btnTop) btnTop.disabled = false;
+    if (btnBottom) btnBottom.disabled = false;
   }
 }
 
@@ -313,7 +393,7 @@ function renderMailList(emails) {
     mailListContainer.appendChild(item);
   });
 
-  // If there are more emails to fetch, append a "Load More" button at the bottom of the list
+  // If there are more emails to fetch within current cache, append "Load More" button
   if (emailsList.length < totalMailCount) {
     const btnContainer = document.createElement('div');
     btnContainer.className = 'load-more-container';
@@ -331,6 +411,22 @@ function renderMailList(emails) {
         fetchEmails(true);
       }
     });
+  } else if (!searchQuery && totalMailCount < serverTotalCount) {
+    // Reached current cache limit (e.g. 500), but server has more!
+    const btnContainer = document.createElement('div');
+    btnContainer.className = 'load-more-container';
+    btnContainer.style.flexDirection = 'column';
+    btnContainer.style.gap = '0.35rem';
+    btnContainer.innerHTML = `
+      <button id="btn-load-more-server" class="btn-load-more btn-load-more-server">
+        <i data-lucide="cloud-download"></i> 서버에서 메일 500개 더 불러오기
+      </button>
+      <div class="server-mail-info" style="font-size: 0.72rem; color: var(--text-muted); text-align: center;">현재 ${totalMailCount}개 / 서버 총 ${serverTotalCount}개</div>
+    `;
+    mailListContainer.appendChild(btnContainer);
+    lucide.createIcons();
+
+    document.getElementById('btn-load-more-server').addEventListener('click', loadMoreFromServer);
   } else if (emailsList.length > 0) {
     const endContainer = document.createElement('div');
     endContainer.className = 'list-end-marker';
