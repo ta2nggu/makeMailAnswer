@@ -183,6 +183,41 @@
               <div class="ai-box-content">
                 <label for="reply-guide">답장하고 싶은 요점을 간단히 적어주세요:</label>
                 <textarea id="reply-guide" placeholder="예: 상대방이 제안한 24일 미팅 일정을 수락하고, 장소는 우리 회사 미팅룸 302호에서 보자고 전해줘."></textarea>
+                
+                <!-- Prompt View & Tuning Section (Email) -->
+                <div class="prompt-tuning-wrapper">
+                  <button id="btn-toggle-prompt-email" class="btn-toggle-prompt" type="button">
+                    <div class="toggle-btn-left">
+                      <i data-lucide="sliders"></i>
+                      <span>전체 프롬프트 확인 & 커스텀 튜닝</span>
+                      <span id="badge-custom-email" class="badge-custom hidden">🎨 튜닝 적용 중</span>
+                    </div>
+                    <i data-lucide="chevron-down" class="toggle-icon"></i>
+                  </button>
+
+                  <div id="panel-prompt-email" class="prompt-tuning-panel hidden">
+                    <div class="prompt-panel-header">
+                      <div class="prompt-panel-info">
+                        <i data-lucide="terminal"></i>
+                        <span>AI로 전달되는 전체 프롬프트 구조입니다. 수정 후 아래 옵션을 체크하면 튜닝된 프롬프트로 생성됩니다.</span>
+                      </div>
+                      <button id="btn-reset-prompt-email" class="btn-reset-prompt" title="기본 표준 템플릿으로 복원" type="button">
+                        <i data-lucide="rotate-ccw"></i> 기본값 복원
+                      </button>
+                    </div>
+                    <div class="prompt-editor-wrap">
+                      <textarea id="email-prompt-editor" spellcheck="false" placeholder="프롬프트를 작성 중..."></textarea>
+                    </div>
+                    <div class="prompt-panel-footer">
+                      <label class="custom-toggle-label">
+                        <input type="checkbox" id="chk-use-custom-email" />
+                        <span class="checkbox-custom"></span>
+                        <span>수정한 커스텀 프롬프트로 AI 답장 생성하기</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 <button id="btn-generate" class="btn-generate">
                   <i data-lucide="sparkles"></i> AI로 정중한 답장 생성
                 </button>
@@ -278,6 +313,40 @@
                 <label for="messenger-keywords">답변에 포함하고 싶은 키워드나 하고 싶은 말을 간략히 입력하세요:</label>
                 <textarea id="messenger-keywords" placeholder="예: 메일로 발송하겠다고 답변, 오늘 오후 중 보낼 예정"></textarea>
                 
+                <!-- Prompt View & Tuning Section (Messenger) -->
+                <div class="prompt-tuning-wrapper">
+                  <button id="btn-toggle-prompt-messenger" class="btn-toggle-prompt" type="button">
+                    <div class="toggle-btn-left">
+                      <i data-lucide="sliders"></i>
+                      <span>전체 프롬프트 확인 & 커스텀 튜닝</span>
+                      <span id="badge-custom-messenger" class="badge-custom hidden">🎨 튜닝 적용 중</span>
+                    </div>
+                    <i data-lucide="chevron-down" class="toggle-icon"></i>
+                  </button>
+
+                  <div id="panel-prompt-messenger" class="prompt-tuning-panel hidden">
+                    <div class="prompt-panel-header">
+                      <div class="prompt-panel-info">
+                        <i data-lucide="terminal"></i>
+                        <span>AI로 전달되는 전체 프롬프트 구조입니다. 수정 후 아래 옵션을 체크하면 튜닝된 프롬프트로 생성됩니다.</span>
+                      </div>
+                      <button id="btn-reset-prompt-messenger" class="btn-reset-prompt" title="기본 표준 템플릿으로 복원" type="button">
+                        <i data-lucide="rotate-ccw"></i> 기본값 복원
+                      </button>
+                    </div>
+                    <div class="prompt-editor-wrap">
+                      <textarea id="messenger-prompt-editor" spellcheck="false" placeholder="프롬프트를 작성 중..."></textarea>
+                    </div>
+                    <div class="prompt-panel-footer">
+                      <label class="custom-toggle-label">
+                        <input type="checkbox" id="chk-use-custom-messenger" />
+                        <span class="checkbox-custom"></span>
+                        <span>수정한 커스텀 프롬프트로 AI 답장 생성하기</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 <button id="btn-generate-messenger" class="btn-generate">
                   <i data-lucide="sparkles"></i> AI 메신저 조언 및 답장 생성
                 </button>

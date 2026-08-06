@@ -11,6 +11,10 @@ let searchQuery = '';
 let searchDebounceTimeout = null;
 let chatHistory = [];
 
+// Prompt Tuning State
+let defaultEmailPromptTemplate = '';
+let defaultMessengerPromptTemplate = '';
+
 function debounceSearch(callback, delay = 400) {
   return function(...args) {
     clearTimeout(searchDebounceTimeout);
@@ -18,11 +22,12 @@ function debounceSearch(callback, delay = 400) {
   };
 }
 
-// Initialize Icons
+// Initialize Icons & Apps
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
   fetchEmails(false); // Auto fetch page 1 on load
   initSplitPane(); // Activate resizable splitter
+  loadDefaultPrompts(); // Load default prompt templates
   
   // Bind Event Listeners
   const btnRefresh = document.getElementById('btn-refresh');
@@ -44,6 +49,25 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-generate').addEventListener('click', generateAIDraft);
   document.getElementById('btn-copy').addEventListener('click', copyDraftToClipboard);
   document.getElementById('btn-send-mail').addEventListener('click', sendReplyEmail);
+
+  // Bind Reply Guide Live Input Update for Email Prompt Editor
+  const replyGuideInput = document.getElementById('reply-guide');
+  if (replyGuideInput) {
+    replyGuideInput.addEventListener('input', updateEmailPromptEditor);
+  }
+
+  // Bind Messenger Live Inputs Update for Messenger Prompt Editor
+  const messengerChatInput = document.getElementById('messenger-chat-history');
+  const messengerKeywordsInput = document.getElementById('messenger-keywords');
+  if (messengerChatInput) {
+    messengerChatInput.addEventListener('input', updateMessengerPromptEditor);
+  }
+  if (messengerKeywordsInput) {
+    messengerKeywordsInput.addEventListener('input', updateMessengerPromptEditor);
+  }
+
+  // Bind Prompt Tuning Toggle Accordions
+  initPromptTuningUI();
 
   // Bind Search Events
   const searchInput = document.getElementById('search-input');
@@ -538,6 +562,9 @@ async function selectEmail(id) {
       mailBodyText.textContent = data.text || '(본문 내용이 없습니다)';
     }
 
+    // Update Email Prompt Live Viewer
+    updateEmailPromptEditor();
+
   } catch (error) {
     console.error(error);
     showToast(error.message, 'error');
@@ -549,13 +576,17 @@ async function selectEmail(id) {
 async function generateAIDraft() {
   const guideText = document.getElementById('reply-guide').value.trim();
   const generateBtn = document.getElementById('btn-generate');
+  const chkCustom = document.getElementById('chk-use-custom-email');
+  const customEditor = document.getElementById('email-prompt-editor');
   
   if (!selectedEmail) {
     showToast('답장을 작성할 메일을 먼저 선택해주세요.', 'error');
     return;
   }
 
-  if (!guideText) {
+  const isCustomActive = chkCustom && chkCustom.checked;
+
+  if (!isCustomActive && !guideText) {
     showToast('AI에게 요청할 답변 가이드나 요점을 적어주세요.', 'error');
     return;
   }
@@ -574,15 +605,21 @@ async function generateAIDraft() {
       text: selectedEmail.text || ''
     };
 
+    const payload = {
+      originalEmail: minimalEmail,
+      replyGuide: guideText
+    };
+
+    if (isCustomActive && customEditor && customEditor.value.trim()) {
+      payload.customPrompt = customEditor.value.trim();
+    }
+
     const response = await fetch('/api/generate-reply', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        originalEmail: minimalEmail,
-        replyGuide: guideText
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();
@@ -597,7 +634,11 @@ async function generateAIDraft() {
 
     // Enable draft panel
     document.getElementById('draft-box').classList.remove('disabled');
-    showToast('AI가 성공적으로 메일 초안을 다듬었습니다!', 'success');
+    if (isCustomActive) {
+      showToast('튜닝한 프롬프트로 메일 초안을 다듬었습니다!', 'success');
+    } else {
+      showToast('AI가 성공적으로 메일 초안을 다듬었습니다!', 'success');
+    }
 
   } catch (error) {
     console.error(error);
@@ -907,8 +948,12 @@ async function generateMessengerAdvice() {
   const generateBtn = document.getElementById('btn-generate-messenger');
   const adviceContent = document.getElementById('messenger-advice-content');
   const repliesList = document.getElementById('messenger-replies-list');
+  const chkCustom = document.getElementById('chk-use-custom-messenger');
+  const customEditor = document.getElementById('messenger-prompt-editor');
 
-  if (!chatHistoryText && !keywordsText) {
+  const isCustomActive = chkCustom && chkCustom.checked;
+
+  if (!isCustomActive && !chatHistoryText && !keywordsText) {
     showToast('대화 내역이나 답변 키워드 중 최소 하나는 입력해주세요.', 'error');
     return;
   }
@@ -933,15 +978,21 @@ async function generateMessengerAdvice() {
   `;
 
   try {
+    const payload = {
+      chatHistory: chatHistoryText,
+      keywords: keywordsText
+    };
+
+    if (isCustomActive && customEditor && customEditor.value.trim()) {
+      payload.customPrompt = customEditor.value.trim();
+    }
+
     const response = await fetch('/api/generate-messenger-reply', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        chatHistory: chatHistoryText,
-        keywords: keywordsText
-      })
+      body: JSON.stringify(payload)
     });
 
     const data = await response.json();
@@ -991,6 +1042,10 @@ async function generateMessengerAdvice() {
       });
     }
 
+    if (isCustomActive) {
+      showToast('튜닝한 프롬프트로 메신저 조언 및 답장을 생성했습니다!', 'success');
+    }
+
   } catch (error) {
     console.error(error);
     showToast(error.message, 'error');
@@ -1002,3 +1057,234 @@ async function generateMessengerAdvice() {
     lucide.createIcons();
   }
 }
+
+// Prompt Tuning UI & Generator Helpers
+async function loadDefaultPrompts() {
+  try {
+    const res = await fetch('/api/default-prompts');
+    if (res.ok) {
+      const data = await res.json();
+      defaultEmailPromptTemplate = data.emailPromptTemplate || '';
+      defaultMessengerPromptTemplate = data.messengerPromptTemplate || '';
+    }
+  } catch (err) {
+    console.error('Failed to fetch default prompt templates:', err);
+  }
+  updateEmailPromptEditor();
+  updateMessengerPromptEditor();
+}
+
+function buildCurrentEmailPrompt() {
+  const replyGuide = document.getElementById('reply-guide')?.value.trim() || '';
+  const from = selectedEmail?.from || '(선택된 메일 없음)';
+  const subject = selectedEmail?.subject || '(선택된 메일 없음)';
+  const date = selectedEmail?.date || '(선택된 메일 없음)';
+  const text = selectedEmail?.text || selectedEmail?.html || '(메일 본문 내용 없음)';
+
+  if (defaultEmailPromptTemplate) {
+    return defaultEmailPromptTemplate
+      .replace('{{from}}', from)
+      .replace('{{subject}}', subject)
+      .replace('{{date}}', date)
+      .replace('{{text}}', text)
+      .replace('{{replyGuide}}', replyGuide || '(작성할 요점 없음 - 메일 맥락에 맞춰 작성)');
+  }
+
+  return `You are a professional business email assistant.
+Your task is to write a polite, professional, and refined reply to the email provided below based on the user's reply guide.
+
+CRITICAL INSTRUCTION:
+- PRESERVE ALL DETAILS AND INTENTS from the user's reply guide as much as possible.
+- Do NOT omit, truncate, or arbitrarily change any specific facts, numbers, dates, locations, action items, or core messages provided by the user.
+- Your primary role is to act as an editor & formatter: polish rough phrasing, fix grammatical issues, and put the user's exact intent into refined Korean business email standards.
+
+[Original Email Header]
+From: ${from}
+Subject: ${subject}
+Date: ${date}
+
+[Original Email Body]
+${text}
+
+[User's Reply Instruction/Draft]
+${replyGuide || '(작성할 요점 없음 - 메일 맥락에 맞춰 작성)'}
+
+Instructions:
+1. Write the response in natural, polite Korean business style (한국어 비즈니스 이메일 톤앤매너).
+2. Maintain and reflect 100% of the core content, facts, and intent from the user's reply guide without dropping any details.
+3. Fix all grammatical issues and refine rough expressions into professional business language.
+4. The body of the generated response MUST strictly adhere to the following signature template format (do not omit greetings and signature):
+안녕하세요.
+로젠 정보전략팀 김태영입니다.
+
+[Refined message body goes here]
+
+감사합니다.
+
+로젠택배 정보전략팀 김태영 책임
+
+5. Output ONLY the reply email subject (prefixed with "Re: ") and the structured reply body.
+6. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.`;
+}
+
+function buildCurrentMessengerPrompt() {
+  const chatHistoryText = document.getElementById('messenger-chat-history')?.value.trim() || '';
+  const keywordsText = document.getElementById('messenger-keywords')?.value.trim() || '';
+
+  if (defaultMessengerPromptTemplate) {
+    return defaultMessengerPromptTemplate
+      .replace('{{chatHistory}}', chatHistoryText || '(이전 대화 내역 없음 - 상대방에게 처음 대화를 선제적으로 건네는 상황입니다.)')
+      .replace('{{keywords}}', keywordsText || '(특별히 지정된 키워드 없음. 대화 맥락에 따라 가장 자연스러운 답변 작성)');
+  }
+
+  return `당신은 사내 메신저 대화 분석 및 답변 작성을 돕는 비즈니스 커뮤니케이션 코치입니다.
+사용자가 대화 내역(chatHistory)과 답변하고 싶은 키워드/의도(keywords)를 제공하면, 다음 보낼 메신저 답장을 작성하고 이에 대한 조언을 제공해야 합니다.
+
+핵심 지침 (내용 유지 & 규격 다듬기):
+- 사용자가 입력한 [답변 키워드 및 의도]의 핵심 내용, 조건, 일정, 전달 사항을 절대로 누락하거나 임의로 바꾸지 말고 최대한 원본 그대로 유지하세요.
+- 당신의 주요 역할은 사용자가 작성한 입력 내용을 사내 메신저 규격과 정중한 어조에 맞게 매끄럽게 다듬고 문법/오탈자를 교정해 주는 것입니다.
+
+[사용자가 제공한 대화 내역]
+${chatHistoryText || '(이전 대화 내역 없음 - 상대방에게 처음 대화를 선제적으로 건네는 상황입니다.)'}
+
+[사용자가 원하는 답변 키워드 및 의도]
+${keywordsText || '(특별히 지정된 키워드 없음. 대화 맥락에 따라 가장 자연스러운 답변 작성)'}
+
+지침:
+1. 사용자가 입력한 [답변 키워드 및 의도]의 정보와 메시지를 임의 축소/변경 없이 100% 반영하여 다듬으세요.
+2. 대화 내역(chatHistory)이 주어졌다면 맥락을 분석하여 상대방의 소속/이름/직급에 맞는 적절한 호칭과 어조로 다듬으세요.
+3. 대화 내역(chatHistory)이 비어있다면, 선제적으로 상대방에게 대화를 시작(첫 인사 및 용건 제시)하는 상황입니다. 입력된 키워드 용건을 바탕으로 정중하게 말을 거는 메시지로 다듬으세요.
+4. 메신저는 이메일보다 비교적 즉각적이고 짧은 호흡으로 진행되므로, 서명 등 불필요한 이메일 양식 없이 자연스럽고 깔끔한 메신저 어조로 완성하세요.
+5. 조언(analysis) 영역에서는 상황을 요약 분석하고 대화 시 주의해야 할 비즈니스 매너 또는 팁을 설명해 주세요. (한국어로 작성)
+6. 답변 초안(replies)은 총 3가지 스타일로 제안해 주세요:
+   - "격식있고 정중한 답변" (상급자나 격식이 필요한 상대)
+   - "부드럽고 친근한 답변" (동료나 친밀한 협업 담당자)
+   - "간결하고 신속한 답변" (빠른 피드백이 필요한 상황)
+7. 반드시 JSON 형식으로만 응답해야 하며, 그 외의 텍스트나 마크다운 코드 블록(\`\`\`json)은 포함하지 마십시오.
+
+반환할 JSON 구조:
+{
+  "analysis": "여기에 현재 상황 분석 및 메신저 대화 팁을 작성하세요 (줄바꿈은 \\n 사용)",
+  "replies": [
+    {
+      "label": "격식있고 정중한 답변",
+      "text": "실제 전송할 메신저 메시지 텍스트"
+    },
+    {
+      "label": "부드럽고 친근한 답변",
+      "text": "실제 전송할 메신저 메시지 텍스트"
+    },
+    {
+      "label": "간결하고 신속한 답변",
+      "text": "실제 전송할 메신저 메시지 텍스트"
+    }
+  ]
+}`;
+}
+
+function updateEmailPromptEditor() {
+  const chkUseCustom = document.getElementById('chk-use-custom-email');
+  if (!chkUseCustom || !chkUseCustom.checked) {
+    const editor = document.getElementById('email-prompt-editor');
+    if (editor) {
+      editor.value = buildCurrentEmailPrompt();
+    }
+  }
+}
+
+function updateMessengerPromptEditor() {
+  const chkUseCustom = document.getElementById('chk-use-custom-messenger');
+  if (!chkUseCustom || !chkUseCustom.checked) {
+    const editor = document.getElementById('messenger-prompt-editor');
+    if (editor) {
+      editor.value = buildCurrentMessengerPrompt();
+    }
+  }
+}
+
+function initPromptTuningUI() {
+  // Email Accordion
+  const btnToggleEmail = document.getElementById('btn-toggle-prompt-email');
+  const panelEmail = document.getElementById('panel-prompt-email');
+  const chkEmail = document.getElementById('chk-use-custom-email');
+  const badgeEmail = document.getElementById('badge-custom-email');
+  const editorEmail = document.getElementById('email-prompt-editor');
+  const btnResetEmail = document.getElementById('btn-reset-prompt-email');
+
+  if (btnToggleEmail && panelEmail) {
+    btnToggleEmail.addEventListener('click', () => {
+      panelEmail.classList.toggle('hidden');
+      btnToggleEmail.classList.toggle('active');
+    });
+  }
+
+  if (editorEmail && chkEmail) {
+    editorEmail.addEventListener('input', () => {
+      chkEmail.checked = true;
+      if (badgeEmail) badgeEmail.classList.remove('hidden');
+    });
+  }
+
+  if (chkEmail) {
+    chkEmail.addEventListener('change', () => {
+      if (chkEmail.checked) {
+        if (badgeEmail) badgeEmail.classList.remove('hidden');
+      } else {
+        if (badgeEmail) badgeEmail.classList.add('hidden');
+        updateEmailPromptEditor();
+      }
+    });
+  }
+
+  if (btnResetEmail) {
+    btnResetEmail.addEventListener('click', () => {
+      if (chkEmail) chkEmail.checked = false;
+      if (badgeEmail) badgeEmail.classList.add('hidden');
+      updateEmailPromptEditor();
+      showToast('기본 프롬프트 템플릿으로 복원되었습니다.', 'info');
+    });
+  }
+
+  // Messenger Accordion
+  const btnToggleMessenger = document.getElementById('btn-toggle-prompt-messenger');
+  const panelMessenger = document.getElementById('panel-prompt-messenger');
+  const chkMessenger = document.getElementById('chk-use-custom-messenger');
+  const badgeMessenger = document.getElementById('badge-custom-messenger');
+  const editorMessenger = document.getElementById('messenger-prompt-editor');
+  const btnResetMessenger = document.getElementById('btn-reset-prompt-messenger');
+
+  if (btnToggleMessenger && panelMessenger) {
+    btnToggleMessenger.addEventListener('click', () => {
+      panelMessenger.classList.toggle('hidden');
+      btnToggleMessenger.classList.toggle('active');
+    });
+  }
+
+  if (editorMessenger && chkMessenger) {
+    editorMessenger.addEventListener('input', () => {
+      chkMessenger.checked = true;
+      if (badgeMessenger) badgeMessenger.classList.remove('hidden');
+    });
+  }
+
+  if (chkMessenger) {
+    chkMessenger.addEventListener('change', () => {
+      if (chkMessenger.checked) {
+        if (badgeMessenger) badgeMessenger.classList.remove('hidden');
+      } else {
+        if (badgeMessenger) badgeMessenger.classList.add('hidden');
+        updateMessengerPromptEditor();
+      }
+    });
+  }
+
+  if (btnResetMessenger) {
+    btnResetMessenger.addEventListener('click', () => {
+      if (chkMessenger) chkMessenger.checked = false;
+      if (badgeMessenger) badgeMessenger.classList.add('hidden');
+      updateMessengerPromptEditor();
+      showToast('기본 프롬프트 템플릿으로 복원되었습니다.', 'info');
+    });
+  }
+}
+
