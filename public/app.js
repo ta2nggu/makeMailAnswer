@@ -10,9 +10,11 @@ let isLoadingMore = false;
 let searchQuery = '';
 let searchDebounceTimeout = null;
 let chatHistory = [];
+let isComposingNewMail = false;
 
 // Prompt Tuning State
 let defaultEmailPromptTemplate = '';
+let defaultNewEmailPromptTemplate = '';
 let defaultMessengerPromptTemplate = '';
 
 function debounceSearch(callback, delay = 400) {
@@ -45,15 +47,66 @@ document.addEventListener('DOMContentLoaded', () => {
       fetchEmails(false, true);
     });
   }
-  document.getElementById('btn-welcome-refresh').addEventListener('click', () => fetchEmails(false));
-  document.getElementById('btn-generate').addEventListener('click', generateAIDraft);
-  document.getElementById('btn-copy').addEventListener('click', copyDraftToClipboard);
-  document.getElementById('btn-send-mail').addEventListener('click', sendReplyEmail);
+  const btnWelcomeRefresh = document.getElementById('btn-welcome-refresh');
+  if (btnWelcomeRefresh) {
+    btnWelcomeRefresh.addEventListener('click', () => fetchEmails(false));
+  }
+
+  // Bind Compose (New Email) Buttons
+  const btnOpenCompose = document.getElementById('btn-open-compose');
+  if (btnOpenCompose) {
+    btnOpenCompose.addEventListener('click', openNewMailCompose);
+  }
+  const btnWelcomeCompose = document.getElementById('btn-welcome-compose');
+  if (btnWelcomeCompose) {
+    btnWelcomeCompose.addEventListener('click', openNewMailCompose);
+  }
+
+  const btnGenerate = document.getElementById('btn-generate');
+  if (btnGenerate) {
+    btnGenerate.addEventListener('click', generateAIDraft);
+  }
+  const btnCopy = document.getElementById('btn-copy');
+  if (btnCopy) {
+    btnCopy.addEventListener('click', copyDraftToClipboard);
+  }
+  const btnSendMail = document.getElementById('btn-send-mail');
+  if (btnSendMail) {
+    btnSendMail.addEventListener('click', sendReplyEmail);
+  }
+
+  // Bind New Mail Actions
+  const btnGenerateNewMail = document.getElementById('btn-generate-newmail');
+  if (btnGenerateNewMail) {
+    btnGenerateNewMail.addEventListener('click', generateNewMailAIDraft);
+  }
+  const btnCopyNewMail = document.getElementById('btn-copy-newmail');
+  if (btnCopyNewMail) {
+    btnCopyNewMail.addEventListener('click', copyNewMailDraftToClipboard);
+  }
+  const btnSendNewMail = document.getElementById('btn-send-newmail');
+  if (btnSendNewMail) {
+    btnSendNewMail.addEventListener('click', sendNewMailEmail);
+  }
 
   // Bind Reply Guide Live Input Update for Email Prompt Editor
   const replyGuideInput = document.getElementById('reply-guide');
   if (replyGuideInput) {
     replyGuideInput.addEventListener('input', updateEmailPromptEditor);
+  }
+
+  // Bind New Mail Live Inputs Update for New Mail Prompt Editor
+  const composeRecipientInput = document.getElementById('compose-recipient-info');
+  const composeSubjectHintInput = document.getElementById('compose-subject-hint');
+  const composeContentGuideInput = document.getElementById('compose-content-guide');
+  if (composeRecipientInput) {
+    composeRecipientInput.addEventListener('input', updateNewEmailPromptEditor);
+  }
+  if (composeSubjectHintInput) {
+    composeSubjectHintInput.addEventListener('input', updateNewEmailPromptEditor);
+  }
+  if (composeContentGuideInput) {
+    composeContentGuideInput.addEventListener('input', updateNewEmailPromptEditor);
   }
 
   // Bind Messenger Live Inputs Update for Messenger Prompt Editor
@@ -73,23 +126,27 @@ document.addEventListener('DOMContentLoaded', () => {
   const searchInput = document.getElementById('search-input');
   const btnClearSearch = document.getElementById('btn-clear-search');
 
-  searchInput.addEventListener('input', debounceSearch((e) => {
-    searchQuery = e.target.value.trim();
-    if (searchQuery) {
-      btnClearSearch.classList.remove('hidden');
-    } else {
-      btnClearSearch.classList.add('hidden');
-    }
-    fetchEmails(false);
-  }, 400));
+  if (searchInput) {
+    searchInput.addEventListener('input', debounceSearch((e) => {
+      searchQuery = e.target.value.trim();
+      if (searchQuery) {
+        if (btnClearSearch) btnClearSearch.classList.remove('hidden');
+      } else {
+        if (btnClearSearch) btnClearSearch.classList.add('hidden');
+      }
+      fetchEmails(false);
+    }, 400));
+  }
 
-  btnClearSearch.addEventListener('click', () => {
-    searchInput.value = '';
-    searchQuery = '';
-    btnClearSearch.classList.add('hidden');
-    fetchEmails(false);
-    searchInput.focus();
-  });
+  if (btnClearSearch && searchInput) {
+    btnClearSearch.addEventListener('click', () => {
+      searchInput.value = '';
+      searchQuery = '';
+      btnClearSearch.classList.add('hidden');
+      fetchEmails(false);
+      searchInput.focus();
+    });
+  }
 
   // Bind Tab Click Events
   const tabReply = document.getElementById('tab-reply');
@@ -97,24 +154,26 @@ document.addEventListener('DOMContentLoaded', () => {
   const panelReply = document.getElementById('panel-reply');
   const panelChat = document.getElementById('panel-chat');
 
-  tabReply.addEventListener('click', () => {
-    tabReply.classList.add('active');
-    tabChat.classList.remove('active');
-    panelReply.classList.remove('hidden');
-    panelChat.classList.add('hidden');
-  });
+  if (tabReply && tabChat && panelReply && panelChat) {
+    tabReply.addEventListener('click', () => {
+      tabReply.classList.add('active');
+      tabChat.classList.remove('active');
+      panelReply.classList.remove('hidden');
+      panelChat.classList.add('hidden');
+    });
 
-  tabChat.addEventListener('click', () => {
-    tabChat.classList.add('active');
-    tabReply.classList.remove('active');
-    panelChat.classList.remove('hidden');
-    panelReply.classList.add('hidden');
-    // Scroll chat to bottom when switching tab
-    const chatMessages = document.getElementById('chat-messages');
-    if (chatMessages) {
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-  });
+    tabChat.addEventListener('click', () => {
+      tabChat.classList.add('active');
+      tabReply.classList.remove('active');
+      panelChat.classList.remove('hidden');
+      panelReply.classList.add('hidden');
+      // Scroll chat to bottom when switching tab
+      const chatMessages = document.getElementById('chat-messages');
+      if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+    });
+  }
 
   // Bind Chat Input Send Events
   const chatInput = document.getElementById('chat-input');
@@ -459,8 +518,44 @@ function renderMailList(emails) {
   }
 }
 
+// Open New Mail Composer
+function openNewMailCompose() {
+  isComposingNewMail = true;
+  selectedEmail = null;
+
+  // Make sure we are in 'mail' mode
+  if (currentMode !== 'mail') {
+    switchWorkspaceMode('mail');
+  }
+
+  // Remove active class from mail list items
+  document.querySelectorAll('.mail-item').forEach(item => {
+    item.classList.remove('active');
+  });
+
+  // Toggle panels
+  document.getElementById('welcome-panel').classList.add('hidden');
+  document.getElementById('workspace-panel').classList.add('hidden');
+  const messengerPanel = document.getElementById('messenger-panel');
+  if (messengerPanel) messengerPanel.classList.add('hidden');
+  document.getElementById('compose-panel').classList.remove('hidden');
+
+  // Update prompt editor
+  updateNewEmailPromptEditor();
+
+  // Focus guide input
+  setTimeout(() => {
+    const focusTarget = document.getElementById('compose-recipient-info');
+    if (focusTarget) focusTarget.focus();
+  }, 50);
+
+  lucide.createIcons();
+}
+
 // Select and Fetch Single Email Detail
 async function selectEmail(id) {
+  isComposingNewMail = false;
+
   // Update active class in sidebar
   document.querySelectorAll('.mail-item').forEach(item => {
     item.classList.remove('active');
@@ -483,6 +578,7 @@ async function selectEmail(id) {
 
   // Toggle workspaces
   document.getElementById('welcome-panel').classList.add('hidden');
+  document.getElementById('compose-panel').classList.add('hidden');
   document.getElementById('workspace-panel').classList.remove('hidden');
   
   // Disable draft box on new selection
@@ -902,40 +998,51 @@ function switchWorkspaceMode(mode) {
 
   const modeMailBtn = document.getElementById('mode-mail');
   const modeMessengerBtn = document.getElementById('mode-messenger');
+  const mailComposeBtnContainer = document.getElementById('mail-compose-btn-container');
   const mailSearchContainer = document.getElementById('mail-search-container');
   const mailSidebarContent = document.getElementById('mail-sidebar-content');
   const messengerSidebarContent = document.getElementById('messenger-sidebar-content');
   const messengerPanel = document.getElementById('messenger-panel');
   const welcomePanel = document.getElementById('welcome-panel');
   const workspacePanel = document.getElementById('workspace-panel');
+  const composePanel = document.getElementById('compose-panel');
   const btnRefresh = document.getElementById('btn-refresh');
 
   if (mode === 'mail') {
     modeMailBtn.classList.add('active');
     modeMessengerBtn.classList.remove('active');
+    if (mailComposeBtnContainer) mailComposeBtnContainer.classList.remove('hidden');
     mailSearchContainer.classList.remove('hidden');
     mailSidebarContent.classList.remove('hidden');
     messengerSidebarContent.classList.add('hidden');
     messengerPanel.classList.add('hidden');
     if (btnRefresh) btnRefresh.classList.remove('hidden');
 
-    // Restore mail view depending on selection
-    if (selectedEmail) {
+    // Restore mail view depending on current state
+    if (isComposingNewMail) {
+      if (composePanel) composePanel.classList.remove('hidden');
+      workspacePanel.classList.add('hidden');
+      welcomePanel.classList.add('hidden');
+    } else if (selectedEmail) {
       workspacePanel.classList.remove('hidden');
+      if (composePanel) composePanel.classList.add('hidden');
       welcomePanel.classList.add('hidden');
     } else {
       welcomePanel.classList.remove('hidden');
       workspacePanel.classList.add('hidden');
+      if (composePanel) composePanel.classList.add('hidden');
     }
   } else {
     modeMessengerBtn.classList.add('active');
     modeMailBtn.classList.remove('active');
+    if (mailComposeBtnContainer) mailComposeBtnContainer.classList.add('hidden');
     mailSearchContainer.classList.add('hidden');
     mailSidebarContent.classList.add('hidden');
     messengerSidebarContent.classList.remove('hidden');
     messengerPanel.classList.remove('hidden');
     welcomePanel.classList.add('hidden');
     workspacePanel.classList.add('hidden');
+    if (composePanel) composePanel.classList.add('hidden');
     if (btnRefresh) btnRefresh.classList.add('hidden');
   }
   lucide.createIcons();
@@ -1058,6 +1165,147 @@ async function generateMessengerAdvice() {
   }
 }
 
+// Generate New Mail Draft using Gemini AI
+async function generateNewMailAIDraft() {
+  const recipientInfo = document.getElementById('compose-recipient-info').value.trim();
+  const subjectHint = document.getElementById('compose-subject-hint').value.trim();
+  const contentGuide = document.getElementById('compose-content-guide').value.trim();
+  const generateBtn = document.getElementById('btn-generate-newmail');
+  const chkCustom = document.getElementById('chk-use-custom-newmail');
+  const customEditor = document.getElementById('newmail-prompt-editor');
+
+  const isCustomActive = chkCustom && chkCustom.checked;
+
+  if (!isCustomActive && !contentGuide && !subjectHint) {
+    showToast('메일 작성 요점이나 제목 키워드를 입력해주세요.', 'error');
+    return;
+  }
+
+  const originalBtnHtml = generateBtn.innerHTML;
+  generateBtn.disabled = true;
+  generateBtn.innerHTML = `<div class="spinner" style="width:16px; height:16px; border-width:2px; display:inline-block; margin-right:8px;"></div> AI 새 메일 작성 중...`;
+
+  try {
+    const payload = {
+      recipientInfo,
+      subjectHint,
+      mailContentGuide: contentGuide
+    };
+
+    if (isCustomActive && customEditor && customEditor.value.trim()) {
+      payload.customPrompt = customEditor.value.trim();
+    }
+
+    const response = await fetch('/api/generate-new-mail', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '새 메일 생성에 실패했습니다.');
+    }
+
+    document.getElementById('compose-subject').value = data.subject || subjectHint || '업무 관련 문의의 건';
+    document.getElementById('compose-body').value = data.body || '';
+
+    if (isCustomActive) {
+      showToast('튜닝한 프롬프트로 새 메일 초안을 생성했습니다!', 'success');
+    } else {
+      showToast('AI가 정중한 비즈니스 새 메일 초안을 완성했습니다!', 'success');
+    }
+  } catch (error) {
+    console.error(error);
+    showToast(error.message, 'error');
+  } finally {
+    generateBtn.disabled = false;
+    generateBtn.innerHTML = originalBtnHtml;
+    lucide.createIcons();
+  }
+}
+
+// Copy New Mail Draft to Clipboard
+function copyNewMailDraftToClipboard() {
+  const draftBody = document.getElementById('compose-body').value;
+  if (!draftBody) {
+    showToast('복사할 본문 내용이 없습니다.', 'error');
+    return;
+  }
+
+  navigator.clipboard.writeText(draftBody)
+    .then(() => {
+      showToast('새 메일 본문이 클립보드에 복사되었습니다.', 'success');
+    })
+    .catch(err => {
+      console.error(err);
+      showToast('클립보드 복사에 실패했습니다.', 'error');
+    });
+}
+
+// Send New Mail via SMTP
+async function sendNewMailEmail() {
+  const toEmail = document.getElementById('compose-to').value.trim();
+  const ccEmail = document.getElementById('compose-cc').value.trim();
+  const subject = document.getElementById('compose-subject').value.trim();
+  const body = document.getElementById('compose-body').value.trim();
+  const sendBtn = document.getElementById('btn-send-newmail');
+
+  if (!toEmail) {
+    showToast('받는 사람(To) 이메일 주소를 입력해주세요.', 'error');
+    document.getElementById('compose-to').focus();
+    return;
+  }
+  if (!subject || !body) {
+    showToast('제목과 본문을 입력해주세요.', 'error');
+    return;
+  }
+
+  let confirmMsg = `${toEmail} 주소로 새 메일을 바로 전송하시겠습니까?`;
+  if (ccEmail) {
+    confirmMsg += `\n(참조: ${ccEmail})`;
+  }
+  const confirmSend = confirm(confirmMsg);
+  if (!confirmSend) return;
+
+  const originalBtnHtml = sendBtn.innerHTML;
+  sendBtn.disabled = true;
+  sendBtn.innerHTML = `<div class="spinner" style="width:16px; height:16px; border-width:2px; display:inline-block; margin-right:8px;"></div> 메일 발송 중...`;
+
+  try {
+    const response = await fetch('/api/send-mail', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        to: toEmail,
+        cc: ccEmail,
+        subject: subject,
+        body: body
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || '메일 발송에 실패했습니다.');
+    }
+
+    showToast('새 메일이 성공적으로 전송되었습니다!', 'success');
+  } catch (error) {
+    console.error(error);
+    showToast(error.message, 'error');
+  } finally {
+    sendBtn.disabled = false;
+    sendBtn.innerHTML = originalBtnHtml;
+    lucide.createIcons();
+  }
+}
+
 // Prompt Tuning UI & Generator Helpers
 async function loadDefaultPrompts() {
   try {
@@ -1065,12 +1313,14 @@ async function loadDefaultPrompts() {
     if (res.ok) {
       const data = await res.json();
       defaultEmailPromptTemplate = data.emailPromptTemplate || '';
+      defaultNewEmailPromptTemplate = data.newEmailPromptTemplate || '';
       defaultMessengerPromptTemplate = data.messengerPromptTemplate || '';
     }
   } catch (err) {
     console.error('Failed to fetch default prompt templates:', err);
   }
   updateEmailPromptEditor();
+  updateNewEmailPromptEditor();
   updateMessengerPromptEditor();
 }
 
@@ -1090,13 +1340,23 @@ function buildCurrentEmailPrompt() {
       .replace('{{replyGuide}}', replyGuide || '(작성할 요점 없음 - 메일 맥락에 맞춰 작성)');
   }
 
-  return `You are a professional business email assistant.
-Your task is to write a polite, professional, and refined reply to the email provided below based on the user's reply guide.
+  return `You are a professional business email assistant and editor.
+Your task is to refine and format the user's keywords/draft into a polite, professional Korean business email.
 
-CRITICAL INSTRUCTION:
-- PRESERVE ALL DETAILS AND INTENTS from the user's reply guide as much as possible.
-- Do NOT omit, truncate, or arbitrarily change any specific facts, numbers, dates, locations, action items, or core messages provided by the user.
-- Your primary role is to act as an editor & formatter: polish rough phrasing, fix grammatical issues, and put the user's exact intent into refined Korean business email standards.
+CRITICAL INSTRUCTIONS (엄격한 작성 지침):
+1. ONLY REFINE USER'S KEYWORDS (사용자 키워드 기반 문장 다듬기):
+   - Include ONLY the contents, facts, and intent explicitly specified in [User's Reply Instruction/Keywords].
+   - Your primary role is strictly an EDITOR: transform rough keywords and bullet points into clear, polite, and refined Korean business sentences.
+   - DO NOT invent, assume, or add new facts, promises, schedule items, or arbitrary details on your own. Do not over-generate content beyond what the user provided.
+   - Fix grammatical errors and polish into standard Korean business etiquette (정중하고 매끄러운 톤앤매너).
+
+2. ORIGINAL EMAIL IS FOR REFERENCE ONLY (원본 메일은 단순 참고용):
+   - [Original Email] is provided strictly for contextual background (to understand business terminology, project context, or reference points).
+   - Do NOT arbitrarily bring extraneous topics or unmentioned facts from the original email into the draft unless directly requested in the user's keywords.
+
+3. RECIPIENT & PURPOSE FLEXIBILITY (수신자 및 전달 대상 유연성):
+   - Note: This email might NOT be sent directly to the original sender. It may be forwarded, shared, or reported to another team member, supervisor, or external partner based on the context.
+   - Do not assume a specific recipient unless indicated in [User's Reply Instruction/Keywords]. Keep the tone versatile and professional.
 
 [Original Email Header]
 From: ${from}
@@ -1106,12 +1366,12 @@ Date: ${date}
 [Original Email Body]
 ${text}
 
-[User's Reply Instruction/Draft]
+[User's Reply Instruction/Keywords]
 ${replyGuide || '(작성할 요점 없음 - 메일 맥락에 맞춰 작성)'}
 
 Instructions:
 1. Write the response in natural, polite Korean business style (한국어 비즈니스 이메일 톤앤매너).
-2. Maintain and reflect 100% of the core content, facts, and intent from the user's reply guide without dropping any details.
+2. Faithfully express ONLY the core content and intent from the user's keywords without adding unauthorized details or dropping user points.
 3. Fix all grammatical issues and refine rough expressions into professional business language.
 4. The body of the generated response MUST strictly adhere to the following signature template format (do not omit greetings and signature):
 안녕하세요.
@@ -1123,8 +1383,53 @@ Instructions:
 
 로젠택배 정보전략팀 김태영 책임
 
-5. Output ONLY the reply email subject (prefixed with "Re: ") and the structured reply body.
+5. Output an appropriate email subject (e.g. prefixed with "Re: " if replying, or a concise title if forwarding/sharing) and the structured reply body.
 6. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.`;
+}
+
+function buildCurrentNewEmailPrompt() {
+  const recipientInfo = document.getElementById('compose-recipient-info')?.value.trim() || '';
+  const subjectHint = document.getElementById('compose-subject-hint')?.value.trim() || '';
+  const mailContentGuide = document.getElementById('compose-content-guide')?.value.trim() || '';
+
+  if (defaultNewEmailPromptTemplate) {
+    return defaultNewEmailPromptTemplate
+      .replace('{{recipientInfo}}', recipientInfo || '(수신자 특별 지정 없음 - 정중하고 일반적인 비즈니스 수신자 호칭 적용)')
+      .replace('{{subjectHint}}', subjectHint || '(작성된 본문 핵심 내용을 바탕으로 명확한 비즈니스 제목 생성)')
+      .replace('{{mailContentGuide}}', mailContentGuide || '(상대방에게 정중하게 인사를 전하고 업무 협의를 제안하는 내용)');
+  }
+
+  return `You are a professional business email assistant.
+Your task is to compose a polite, professional, and well-structured Korean business email from scratch (신규 메일 최초 발송) based on the user's requirements.
+
+CRITICAL INSTRUCTION:
+- PRESERVE ALL DETAILS, FACTS, DATES, NUMBERS, AND REQUESTS from the user's guide without omitting or distorting anything.
+- Act as a professional business writer & formatter: refine rough phrasing, structure the email clearly, and adhere to standard Korean business email etiquette.
+
+[Recipient Info / Context]
+${recipientInfo || '(수신자 특별 지정 없음 - 정중하고 일반적인 비즈니스 수신자 호칭 적용)'}
+
+[Subject Keyword / Topic]
+${subjectHint || '(작성된 본문 핵심 내용을 바탕으로 명확한 비즈니스 제목 생성)'}
+
+[User's Message & Core Points]
+${mailContentGuide || '(상대방에게 정중하게 인사를 전하고 업무 협의를 제안하는 내용)'}
+
+Instructions:
+1. Write in polite, respectful, and natural Korean business email tone (한국어 비즈니스 이메일 톤앤매너).
+2. Propose a clear, professional, and concise subject line appropriate for the email topic (do NOT include "Re:").
+3. The body MUST strictly adhere to the following structure and signature format:
+안녕하세요. ${recipientInfo ? recipientInfo.trim() + '님' : ''}
+로젠 정보전략팀 김태영입니다.
+
+[Refined and well-structured message body: clear context, core message, dates, action requests]
+
+감사합니다.
+
+로젠택배 정보전략팀 김태영 책임
+
+4. Fix all grammatical errors and polish into executive-level professional wording.
+5. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.`;
 }
 
 function buildCurrentMessengerPrompt() {
@@ -1192,6 +1497,16 @@ function updateEmailPromptEditor() {
   }
 }
 
+function updateNewEmailPromptEditor() {
+  const chkUseCustom = document.getElementById('chk-use-custom-newmail');
+  if (!chkUseCustom || !chkUseCustom.checked) {
+    const editor = document.getElementById('newmail-prompt-editor');
+    if (editor) {
+      editor.value = buildCurrentNewEmailPrompt();
+    }
+  }
+}
+
 function updateMessengerPromptEditor() {
   const chkUseCustom = document.getElementById('chk-use-custom-messenger');
   if (!chkUseCustom || !chkUseCustom.checked) {
@@ -1242,6 +1557,48 @@ function initPromptTuningUI() {
       if (badgeEmail) badgeEmail.classList.add('hidden');
       updateEmailPromptEditor();
       showToast('기본 프롬프트 템플릿으로 복원되었습니다.', 'info');
+    });
+  }
+
+  // New Mail Accordion
+  const btnToggleNewMail = document.getElementById('btn-toggle-prompt-newmail');
+  const panelNewMail = document.getElementById('panel-prompt-newmail');
+  const chkNewMail = document.getElementById('chk-use-custom-newmail');
+  const badgeNewMail = document.getElementById('badge-custom-newmail');
+  const editorNewMail = document.getElementById('newmail-prompt-editor');
+  const btnResetNewMail = document.getElementById('btn-reset-prompt-newmail');
+
+  if (btnToggleNewMail && panelNewMail) {
+    btnToggleNewMail.addEventListener('click', () => {
+      panelNewMail.classList.toggle('hidden');
+      btnToggleNewMail.classList.toggle('active');
+    });
+  }
+
+  if (editorNewMail && chkNewMail) {
+    editorNewMail.addEventListener('input', () => {
+      chkNewMail.checked = true;
+      if (badgeNewMail) badgeNewMail.classList.remove('hidden');
+    });
+  }
+
+  if (chkNewMail) {
+    chkNewMail.addEventListener('change', () => {
+      if (chkNewMail.checked) {
+        if (badgeNewMail) badgeNewMail.classList.remove('hidden');
+      } else {
+        if (badgeNewMail) badgeNewMail.classList.add('hidden');
+        updateNewEmailPromptEditor();
+      }
+    });
+  }
+
+  if (btnResetNewMail) {
+    btnResetNewMail.addEventListener('click', () => {
+      if (chkNewMail) chkNewMail.checked = false;
+      if (badgeNewMail) badgeNewMail.classList.add('hidden');
+      updateNewEmailPromptEditor();
+      showToast('기본 새 메일 프롬프트 템플릿으로 복원되었습니다.', 'info');
     });
   }
 

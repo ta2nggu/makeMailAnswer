@@ -140,8 +140,8 @@ async function syncMailbox(force = false) {
   const missingMails = targetMails.filter(item => !emailCache[item.uniqueId]);
 
   if (missingMails.length > 0 && !isSyncingBackground) {
-    // If cache has missing items, fetch first batch (up to 50) synchronously if user is waiting
-    const syncImmediatelyCount = cachedMailList.length < 50 ? Math.min(50, missingMails.length) : 0;
+    // If cache has missing items, fetch first batch (up to 50) synchronously if user requested force refresh or cache is small
+    const syncImmediatelyCount = (force || cachedMailList.length < 50) ? Math.min(50, missingMails.length) : 0;
 
     if (syncImmediatelyCount > 0) {
       console.log(`Syncing ${syncImmediatelyCount} mails synchronously...`);
@@ -324,13 +324,23 @@ app.get('/api/emails/:id', async (req, res) => {
 // API: Get default prompt templates
 app.get('/api/default-prompts', (req, res) => {
   res.json({
-    emailPromptTemplate: `You are a professional business email assistant.
-Your task is to write a polite, professional, and refined reply to the email provided below based on the user's reply guide.
+    emailPromptTemplate: `You are a professional business email assistant and editor.
+Your task is to refine and format the user's keywords/draft into a polite, professional Korean business email.
 
-CRITICAL INSTRUCTION:
-- PRESERVE ALL DETAILS AND INTENTS from the user's reply guide as much as possible. 
-- Do NOT omit, truncate, or arbitrarily change any specific facts, numbers, dates, locations, action items, or core messages provided by the user.
-- Your primary role is to act as a editor & formatter: polish rough phrasing, fix grammatical issues, and put the user's exact intent into refined Korean business email standards.
+CRITICAL INSTRUCTIONS (엄격한 작성 지침):
+1. ONLY REFINE USER'S KEYWORDS (사용자 키워드 기반 문장 다듬기):
+   - Include ONLY the contents, facts, and intent explicitly specified in [User's Reply Instruction/Keywords].
+   - Your primary role is strictly an EDITOR: transform rough keywords and bullet points into clear, polite, and refined Korean business sentences.
+   - DO NOT invent, assume, or add new facts, promises, schedule items, or arbitrary details on your own. Do not over-generate content beyond what the user provided.
+   - Fix grammatical errors and polish into standard Korean business etiquette (정중하고 매끄러운 톤앤매너).
+
+2. ORIGINAL EMAIL IS FOR REFERENCE ONLY (원본 메일은 단순 참고용):
+   - [Original Email] is provided strictly for contextual background (to understand business terminology, project context, or reference points).
+   - Do NOT arbitrarily bring extraneous topics or unmentioned facts from the original email into the draft unless directly requested in the user's keywords.
+
+3. RECIPIENT & PURPOSE FLEXIBILITY (수신자 및 전달 대상 유연성):
+   - Note: This email might NOT be sent directly to the original sender. It may be forwarded, shared, or reported to another team member, supervisor, or external partner based on the context.
+   - Do not assume a specific recipient unless indicated in [User's Reply Instruction/Keywords]. Keep the tone versatile and professional.
 
 [Original Email Header]
 From: {{from}}
@@ -340,12 +350,12 @@ Date: {{date}}
 [Original Email Body]
 {{text}}
 
-[User's Reply Instruction/Draft]
+[User's Reply Instruction/Keywords]
 {{replyGuide}}
 
 Instructions:
 1. Write the response in natural, polite Korean business style (한국어 비즈니스 이메일 톤앤매너).
-2. Maintain and reflect 100% of the core content, facts, and intent from the user's reply guide without dropping any details.
+2. Faithfully express ONLY the core content and intent from the user's keywords without adding unauthorized details or dropping user points.
 3. Fix all grammatical issues and refine rough expressions into professional business language.
 4. The body of the generated response MUST strictly adhere to the following signature template format (do not omit greetings and signature):
 안녕하세요.
@@ -357,8 +367,39 @@ Instructions:
 
 로젠택배 정보전략팀 김태영 책임
 
-5. Output ONLY the reply email subject (prefixed with "Re: ") and the structured reply body.
+5. Output an appropriate email subject (e.g. prefixed with "Re: " if replying, or a concise title if forwarding/sharing) and the structured reply body.
 6. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.`,
+    newEmailPromptTemplate: `You are a professional business email assistant.
+Your task is to compose a polite, professional, and well-structured Korean business email from scratch (신규 메일 최초 발송) based on the user's requirements.
+
+CRITICAL INSTRUCTION:
+- PRESERVE ALL DETAILS, FACTS, DATES, NUMBERS, AND REQUESTS from the user's guide without omitting or distorting anything.
+- Act as a professional business writer & formatter: refine rough phrasing, structure the email clearly, and adhere to standard Korean business email etiquette.
+
+[Recipient Info / Context]
+{{recipientInfo}}
+
+[Subject Keyword / Topic]
+{{subjectHint}}
+
+[User's Message & Core Points]
+{{mailContentGuide}}
+
+Instructions:
+1. Write in polite, respectful, and natural Korean business email tone (한국어 비즈니스 이메일 톤앤매너).
+2. Propose a clear, professional, and concise subject line appropriate for the email topic (do NOT include "Re:").
+3. The body MUST strictly adhere to the following structure and signature format:
+안녕하세요. [수신자 호칭/직급 반영 (예: OOO 과장님/담당자님, 정보가 없으면 생략)]
+로젠 정보전략팀 김태영입니다.
+
+[Refined and well-structured message body: clear context, core message, dates, action requests]
+
+감사합니다.
+
+로젠택배 정보전략팀 김태영 책임
+
+4. Fix all grammatical errors and polish into executive-level professional wording.
+5. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.`,
     messengerPromptTemplate: `당신은 사내 메신저 대화 분석 및 답변 작성을 돕는 비즈니스 커뮤니케이션 코치입니다.
 사용자가 대화 내역(chatHistory)과 답변하고 싶은 키워드/의도(keywords)를 제공하면, 다음 보낼 메신저 답장을 작성하고 이에 대한 조언을 제공해야 합니다.
 
@@ -423,13 +464,23 @@ app.post('/api/generate-reply', async (req, res) => {
     let prompt = customPrompt;
     if (!prompt) {
       prompt = `
-You are a professional business email assistant.
-Your task is to write a polite, professional, and refined reply to the email provided below based on the user's reply guide.
+You are a professional business email assistant and editor.
+Your task is to refine and format the user's keywords/draft into a polite, professional Korean business email.
 
-CRITICAL INSTRUCTION:
-- PRESERVE ALL DETAILS AND INTENTS from the user's reply guide as much as possible.
-- Do NOT omit, truncate, or arbitrarily change any specific facts, numbers, dates, locations, action items, or core messages provided by the user.
-- Your primary role is to act as an editor & formatter: polish rough phrasing, fix grammatical issues, and put the user's exact intent into refined Korean business email standards.
+CRITICAL INSTRUCTIONS (엄격한 작성 지침):
+1. ONLY REFINE USER'S KEYWORDS (사용자 키워드 기반 문장 다듬기):
+   - Include ONLY the contents, facts, and intent explicitly specified in [User's Reply Instruction/Keywords].
+   - Your primary role is strictly an EDITOR: transform rough keywords and bullet points into clear, polite, and refined Korean business sentences.
+   - DO NOT invent, assume, or add new facts, promises, schedule items, or arbitrary details on your own. Do not over-generate content beyond what the user provided.
+   - Fix grammatical errors and polish into standard Korean business etiquette (정중하고 매끄러운 톤앤매너).
+
+2. ORIGINAL EMAIL IS FOR REFERENCE ONLY (원본 메일은 단순 참고용):
+   - [Original Email] is provided strictly for contextual background (to understand business terminology, project context, or reference points).
+   - Do NOT arbitrarily bring extraneous topics or unmentioned facts from the original email into the draft unless directly requested in the user's keywords.
+
+3. RECIPIENT & PURPOSE FLEXIBILITY (수신자 및 전달 대상 유연성):
+   - Note: This email might NOT be sent directly to the original sender. It may be forwarded, shared, or reported to another team member, supervisor, or external partner based on the context.
+   - Do not assume a specific recipient unless indicated in [User's Reply Instruction/Keywords]. Keep the tone versatile and professional.
 
 [Original Email Header]
 From: ${originalEmail.from}
@@ -439,12 +490,12 @@ Date: ${originalEmail.date}
 [Original Email Body]
 ${originalEmail.text || originalEmail.html}
 
-[User's Reply Instruction/Draft]
+[User's Reply Instruction/Keywords]
 ${replyGuide}
 
 Instructions:
 1. Write the response in natural, polite Korean business style (한국어 비즈니스 이메일 톤앤매너).
-2. Maintain and reflect 100% of the core content, facts, and intent from the user's reply guide without dropping any details.
+2. Faithfully express ONLY the core content and intent from the user's keywords without adding unauthorized details or dropping user points.
 3. Fix all grammatical issues and refine rough expressions into professional business language.
 4. The body of the generated response MUST strictly adhere to the following signature template format (do not omit greetings and signature):
 안녕하세요.
@@ -456,7 +507,7 @@ Instructions:
 
 로젠택배 정보전략팀 김태영 책임
 
-5. Output ONLY the reply email subject (prefixed with "Re: ") and the structured reply body.
+5. Output an appropriate email subject (e.g. prefixed with "Re: " if replying, or a concise title if forwarding/sharing) and the structured reply body.
 6. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.
 `;
     }
@@ -481,6 +532,81 @@ Instructions:
   } catch (error) {
     console.error('Gemini API Error:', error);
     res.status(500).json({ error: `AI Draft Generation Error: ${error.message}` });
+  }
+});
+
+// API: Generate new business email from scratch using Gemini AI
+app.post('/api/generate-new-mail', async (req, res) => {
+  const { recipientInfo, subjectHint, mailContentGuide, customPrompt } = req.body;
+
+  if (!genAI) {
+    return res.status(400).json({ error: 'Gemini API Key is missing or invalid. Please check your .env file.' });
+  }
+
+  if (!customPrompt && !mailContentGuide && !subjectHint) {
+    return res.status(400).json({ error: '메일 작성 요점이나 제목 키워드를 입력해 주세요.' });
+  }
+
+  try {
+    const model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || 'gemini-3.5-flash' });
+
+    let prompt = customPrompt;
+    if (!prompt) {
+      prompt = `
+You are a professional business email assistant.
+Your task is to compose a polite, professional, and well-structured Korean business email from scratch (신규 메일 최초 발송) based on the user's requirements.
+
+CRITICAL INSTRUCTION:
+- PRESERVE ALL DETAILS, FACTS, DATES, NUMBERS, AND REQUESTS from the user's guide without omitting or distorting anything.
+- Act as a professional business writer & formatter: refine rough phrasing, structure the email clearly, and adhere to standard Korean business email etiquette.
+
+[Recipient Info / Context]
+${recipientInfo || '(수신자 특별 지정 없음 - 정중하고 일반적인 비즈니스 수신자 호칭 적용)'}
+
+[Subject Keyword / Topic]
+${subjectHint || '(작성된 본문 핵심 내용을 바탕으로 명확한 비즈니스 제목 생성)'}
+
+[User's Message & Core Points]
+${mailContentGuide || '(상대방에게 정중하게 인사를 전하고 업무 협의를 제안하는 내용)'}
+
+Instructions:
+1. Write in polite, respectful, and natural Korean business email tone (한국어 비즈니스 이메일 톤앤매너).
+2. Propose a clear, professional, and concise subject line appropriate for the email topic (do NOT include "Re:").
+3. The body MUST strictly adhere to the following structure and signature format:
+안녕하세요. ${recipientInfo ? recipientInfo.trim() + '님' : ''}
+로젠 정보전략팀 김태영입니다.
+
+[Refined and well-structured message body: clear context, core message, dates, action requests]
+
+감사합니다.
+
+로젠택배 정보전략팀 김태영 책임
+
+4. Fix all grammatical errors and polish into executive-level professional wording.
+5. Format the output in JSON format with keys "subject" and "body". Do not include markdown wraps (like \`\`\`json) in your raw response. Just return the JSON object directly.
+`;
+    }
+
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    let text = response.text().trim();
+
+    // Clean up potential markdown formatting block
+    if (text.startsWith('```json')) {
+      text = text.substring(7);
+    } else if (text.startsWith('```')) {
+      text = text.substring(3);
+    }
+    if (text.endsWith('```')) {
+      text = text.substring(0, text.length - 3);
+    }
+    text = text.trim();
+
+    const mailData = JSON.parse(text);
+    res.json(mailData);
+  } catch (error) {
+    console.error('Gemini New Mail API Error:', error);
+    res.status(500).json({ error: `AI New Mail Generation Error: ${error.message}` });
   }
 });
 
@@ -607,8 +733,8 @@ ${keywords || '(특별히 지정된 키워드 없음. 대화 맥락에 따라 �
   }
 });
 
-// API: Send email (SMTP)
-app.post('/api/send-reply', async (req, res) => {
+// API: Send email (SMTP) - supports both reply and new email
+const handleSendEmail = async (req, res) => {
   const { to, cc, subject, body } = req.body;
 
   if (!to || !subject || !body) {
@@ -645,7 +771,10 @@ app.post('/api/send-reply', async (req, res) => {
     console.error('SMTP Error:', error);
     res.status(500).json({ error: `SMTP Send Error: ${error.message}` });
   }
-});
+};
+
+app.post('/api/send-reply', handleSendEmail);
+app.post('/api/send-mail', handleSendEmail);
 
 app.listen(PORT, () => {
   console.log(`AI Mail Assistant server running at http://localhost:${PORT}`);

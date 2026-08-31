@@ -445,6 +445,48 @@ body {
   line-height: 1.6;
 }
 
+.welcome-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  font-family: var(--font-sans);
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-secondary:hover {
+  background-color: var(--bg-sidebar);
+  border-color: var(--border-focus);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.btn-secondary:active {
+  transform: translateY(0);
+}
+
+.btn-secondary svg {
+  width: 18px;
+  height: 18px;
+}
+
 /* Workspace Layout (Split Screen) */
 .workspace-panel {
   display: grid;
@@ -1205,6 +1247,45 @@ textarea:focus {
   height: 15px;
 }
 
+/* Sidebar Compose Button */
+.compose-btn-container {
+  padding: 0 0.75rem 0.5rem 0.75rem;
+}
+
+.btn-compose {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: var(--accent-gradient);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 0.65rem 1rem;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-compose:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+  opacity: 0.95;
+}
+
+.btn-compose:active {
+  transform: translateY(0);
+}
+
+.btn-compose svg {
+  width: 16px;
+  height: 16px;
+}
+
 /* Sidebar Messenger Tips Box */
 .sidebar-helper-box {
   margin: 0.5rem 0.75rem;
@@ -1267,6 +1348,100 @@ textarea:focus {
   color: var(--text-muted);
   line-height: 1.45;
   margin: 0;
+}
+
+/* Compose Mode (New Email) Layout */
+.compose-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  padding: 1.5rem;
+  gap: 1rem;
+}
+
+.compose-layout {
+  display: grid;
+  grid-template-columns: 1fr 6px 1fr;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.compose-guide-section,
+.compose-draft-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow-y: auto;
+  height: 100%;
+  min-height: 0;
+  padding-right: 4px;
+}
+
+.compose-divider {
+  width: 6px;
+  height: 100%;
+  background-color: var(--border-color);
+  margin: 0 1rem;
+  flex-shrink: 0;
+}
+
+.compose-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.compose-field-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.compose-field-group input[type="text"] {
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  background-color: #ffffff;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.compose-field-group input[type="text"]:focus {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--border-focus);
+}
+
+.compose-field-group textarea {
+  min-height: 140px;
+}
+
+.compose-draft-box {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.compose-draft-box .ai-box-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.compose-textarea-body {
+  flex: 1;
+  min-height: 260px !important;
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.6;
 }
 
 /* Messenger Mode Layout */
