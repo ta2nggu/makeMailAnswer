@@ -9,9 +9,19 @@ const POP3Client = require('./pop3');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
+
+// API: Serve signature banner image
+app.get('/api/signature-banner', (req, res) => {
+  const bannerPath = 'C:\\Users\\kty\\Pictures\\hotbanner.jpg';
+  if (fs.existsSync(bannerPath)) {
+    res.sendFile(bannerPath);
+  } else {
+    res.status(404).send('Banner not found');
+  }
+});
 
 // Initialize Gemini API
 let genAI = null;
@@ -48,6 +58,7 @@ async function runWithPop3Lock(fn) {
 
 let emailCache = {};
 let cachedMailList = [];
+let msgNumToUidMap = {};
 let lastSyncTime = 0;
 let isSyncingBackground = false;
 
@@ -113,6 +124,12 @@ async function syncMailbox(force = false) {
   // Sort newest to oldest (msgNum descending)
   uidlMails.sort((a, b) => b.msgNum - a.msgNum);
   totalServerMailsCount = uidlMails.length;
+
+  // Update msgNum to uniqueId map
+  msgNumToUidMap = {};
+  for (const item of uidlMails) {
+    msgNumToUidMap[item.msgNum] = item.uniqueId;
+  }
 
   // Keep targetMails up to maxCacheSize
   const targetMails = uidlMails.slice(0, maxCacheSize);
@@ -285,6 +302,9 @@ app.get('/api/emails', async (req, res) => {
   }
 });
 
+// In-memory or temporary store for email attachments
+const emailAttachmentsCache = {};
+
 // API: Get detailed email body
 app.get('/api/emails/:id', async (req, res) => {
   const emailId = parseInt(req.params.id, 10);
@@ -303,14 +323,34 @@ app.get('/api/emails/:id', async (req, res) => {
       const parsed = await simpleParser(rawMail);
       await client.quit();
 
+      // Extract attachments metadata & cache buffers for download
+      const attachments = (parsed.attachments || []).map((att, index) => {
+        return {
+          id: index,
+          filename: att.filename || `attachment_${index + 1}`,
+          contentType: att.contentType,
+          size: att.size || (att.content ? att.content.length : 0),
+        };
+      });
+
+      // Cache attachment buffers in memory for this email
+      if (parsed.attachments && parsed.attachments.length > 0) {
+        emailAttachmentsCache[emailId] = parsed.attachments;
+      } else {
+        delete emailAttachmentsCache[emailId];
+      }
+
       return {
         id: emailId,
+        uniqueId: msgNumToUidMap[emailId] || '',
         subject: parsed.subject || '(No Subject)',
         from: parsed.from ? parsed.from.text : 'Unknown',
         to: parsed.to ? parsed.to.text : 'Unknown',
+        cc: parsed.cc ? parsed.cc.text : '',
         date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
         text: parsed.text || '',
         html: parsed.html || parsed.text || '',
+        attachments: attachments
       };
     });
 
@@ -318,6 +358,51 @@ app.get('/api/emails/:id', async (req, res) => {
   } catch (error) {
     console.error('POP3 Detail Error:', error);
     res.status(500).json({ error: `Failed to fetch email details: ${error.message}` });
+  }
+});
+
+// API: Download email attachment
+app.get('/api/emails/:id/attachments/:attId', async (req, res) => {
+  const emailId = parseInt(req.params.id, 10);
+  const attIndex = parseInt(req.params.attId, 10);
+
+  try {
+    let attachments = emailAttachmentsCache[emailId];
+    if (!attachments) {
+      // Re-fetch email from POP3 if not in cache
+      await runWithPop3Lock(async () => {
+        const config = getPop3Config();
+        const client = new POP3Client(config);
+        await client.connect();
+        await client.login();
+        const rawMail = await client.getMail(emailId);
+        const parsed = await simpleParser(rawMail);
+        await client.quit();
+        if (parsed.attachments && parsed.attachments.length > 0) {
+          emailAttachmentsCache[emailId] = parsed.attachments;
+          attachments = parsed.attachments;
+        }
+      });
+    }
+
+    if (!attachments || !attachments[attIndex]) {
+      return res.status(404).send('Attachment not found');
+    }
+
+    const att = attachments[attIndex];
+    const filename = att.filename || `attachment_${attIndex + 1}`;
+
+    res.setHeader('Content-Type', att.contentType || 'application/octet-stream');
+    // Encode filename for Content-Disposition in UTF-8
+    const encodedFilename = encodeURIComponent(filename);
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodedFilename}`);
+    if (att.size) {
+      res.setHeader('Content-Length', att.size);
+    }
+    res.send(att.content);
+  } catch (err) {
+    console.error('Attachment download error:', err);
+    res.status(500).send(`Failed to download attachment: ${err.message}`);
   }
 });
 
@@ -733,12 +818,26 @@ ${keywords || '(특별히 지정된 키워드 없음. 대화 맥락에 따라 �
   }
 });
 
-// API: Send email (SMTP) - supports both reply and new email
+// API: Send email (SMTP) - supports reply, new email, attachments, and clipboard inline images
 const handleSendEmail = async (req, res) => {
-  const { to, cc, subject, body } = req.body;
+  const { to, cc, subject, body, attachments, inlineImages } = req.body;
 
   if (!to || !subject || !body) {
     return res.status(400).json({ error: 'Missing to, subject, or body fields.' });
+  }
+
+  // Ensure default CC taeyoung@ilogen.com is present if not already included
+  let finalCc = cc ? cc.trim() : '';
+  const defaultCc = 'taeyoung@ilogen.com';
+  if (finalCc) {
+    const list = finalCc.split(',').map(s => s.trim()).filter(Boolean);
+    const hasDefault = list.some(addr => addr.toLowerCase().includes(defaultCc.toLowerCase()));
+    if (!hasDefault) {
+      list.push(defaultCc);
+    }
+    finalCc = list.join(', ');
+  } else {
+    finalCc = defaultCc;
   }
 
   const transporter = nodemailer.createTransport({
@@ -758,12 +857,109 @@ const handleSendEmail = async (req, res) => {
   });
 
   try {
+    const mailAttachments = [];
+
+    // 1. Signature banner inline attachment
+    const bannerPath = 'C:\\Users\\kty\\Pictures\\hotbanner.jpg';
+    const bannerExists = fs.existsSync(bannerPath);
+    let bannerHtml = '';
+    if (bannerExists) {
+      mailAttachments.push({
+        filename: 'hotbanner.jpg',
+        path: bannerPath,
+        cid: 'signature-hotbanner' // cid matching HTML img src
+      });
+      bannerHtml = `
+        <div style="margin-top: 20px; margin-bottom: 20px;">
+          <a href="https://bit.ly/ilogenemail" target="_blank" rel="noopener noreferrer">
+            <img src="cid:signature-hotbanner" alt="Logen Banner" style="max-width: 100%; border: 0; display: block;" />
+          </a>
+        </div>
+      `;
+    }
+
+    // 2. Clipboard pasted inline images (CID embedding)
+    const validInlineImages = Array.isArray(inlineImages) ? inlineImages : [];
+    validInlineImages.forEach((img, idx) => {
+      if (img && img.data && img.cid) {
+        // data format: "data:image/png;base64,....."
+        const base64Data = img.data.replace(/^data:image\/\w+;base64,/, '');
+        mailAttachments.push({
+          filename: img.filename || `pasted_image_${idx + 1}.png`,
+          content: Buffer.from(base64Data, 'base64'),
+          cid: img.cid,
+          contentType: img.contentType || 'image/png'
+        });
+      }
+    });
+
+    // 3. User document / file attachments (docx, xlsx, pdf, zip, etc.)
+    const userAttachments = Array.isArray(attachments) ? attachments : [];
+    userAttachments.forEach((file) => {
+      if (file && file.filename && file.data) {
+        // data format: base64 string
+        const base64Data = file.data.includes('base64,') ? file.data.split('base64,')[1] : file.data;
+        mailAttachments.push({
+          filename: file.filename,
+          content: Buffer.from(base64Data, 'base64'),
+          contentType: file.contentType || undefined
+        });
+      }
+    });
+
+    // Helper to format text with preserved newlines and replacement for inline image placeholders
+    const formatTextToHtml = (str) => {
+      let escaped = str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\n/g, '<br>');
+
+      // Replace inline image tokens: [이미지: image_cid_...] -> <div style="margin: 12px 0;"><img src="cid:..." style="max-width:100%; border-radius:6px; box-shadow:0 1px 3px rgba(0,0,0,0.1);" /></div>
+      validInlineImages.forEach(img => {
+        const tokenEscaped = `[이미지: ${img.cid}]`;
+        const imgTag = `<div style="margin: 12px 0;"><img src="cid:${img.cid}" alt="첨부 이미지" style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid #e2e8f0; display: block;" /></div>`;
+        escaped = escaped.split(tokenEscaped).join(imgTag);
+      });
+
+      return escaped;
+    };
+
+    // Check if body has an original message section (e.g. reply history)
+    const quoteDivider = '----- Original Message -----';
+    let htmlBody = `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; color: #1e293b;">`;
+
+    if (body.includes(quoteDivider)) {
+      const parts = body.split(quoteDivider);
+      const myReplyPart = parts[0];
+      const historyPart = parts.slice(1).join(quoteDivider);
+
+      htmlBody += `<div>${formatTextToHtml(myReplyPart)}</div>`;
+      if (bannerHtml) {
+        htmlBody += bannerHtml;
+      }
+      htmlBody += `<div style="margin-top: 15px; border-top: 1px solid #cbd5e1; padding-top: 12px; color: #475569;">
+        <span style="font-weight: bold; color: #64748b;">----- Original Message -----</span>
+        <div>${formatTextToHtml(historyPart)}</div>
+      </div>`;
+    } else {
+      // Normal new email without quote history
+      htmlBody += `<div>${formatTextToHtml(body)}</div>`;
+      if (bannerHtml) {
+        htmlBody += bannerHtml;
+      }
+    }
+
+    htmlBody += `</div>`;
+
     const info = await transporter.sendMail({
       from: process.env.MAIL_USER,
       to,
-      cc: cc || undefined, // Send CC only if provided
+      cc: finalCc || undefined,
       subject,
       text: body,
+      html: htmlBody,
+      attachments: mailAttachments.length > 0 ? mailAttachments : undefined
     });
 
     res.json({ success: true, messageId: info.messageId });

@@ -16,12 +16,36 @@ let isComposingNewMail = false;
 let defaultEmailPromptTemplate = '';
 let defaultNewEmailPromptTemplate = '';
 let defaultMessengerPromptTemplate = '';
+let currentReplyMode = 'reply'; // 'reply' or 'reply-all'
+
+// Attachments & Inline Images State (for Reply & New Mail)
+let replyAttachments = []; // [{ filename, data, size, contentType }]
+let replyInlineImages = []; // [{ cid, filename, data, size, contentType }]
+
+let composeAttachments = []; // [{ filename, data, size, contentType }]
+let composeInlineImages = []; // [{ cid, filename, data, size, contentType }]
 
 function debounceSearch(callback, delay = 400) {
   return function(...args) {
     clearTimeout(searchDebounceTimeout);
     searchDebounceTimeout = setTimeout(() => callback.apply(this, args), delay);
   };
+}
+
+// Parse multiple email addresses into array of { name, email }
+function parseEmailList(str) {
+  if (!str) return [];
+  const results = [];
+  const regex = /(?:"?([^"]*)"?\s*)?<([^>]+)>|([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g;
+  let match;
+  while ((match = regex.exec(str)) !== null) {
+    const email = (match[2] || match[3] || '').trim();
+    const name = (match[1] || '').trim();
+    if (email) {
+      results.push({ name, email });
+    }
+  }
+  return results;
 }
 
 // Initialize Icons & Apps
@@ -31,6 +55,14 @@ document.addEventListener('DOMContentLoaded', () => {
   initSplitPane(); // Activate resizable splitter
   loadDefaultPrompts(); // Load default prompt templates
   
+  // Bind Reply / Reply-All Switcher Buttons
+  const btnModeReply = document.getElementById('btn-mode-reply');
+  const btnModeReplyAll = document.getElementById('btn-mode-reply-all');
+  if (btnModeReply && btnModeReplyAll) {
+    btnModeReply.addEventListener('click', () => setReplyMode('reply'));
+    btnModeReplyAll.addEventListener('click', () => setReplyMode('reply-all'));
+  }
+
   // Bind Event Listeners
   const btnRefresh = document.getElementById('btn-refresh');
   if (btnRefresh) {
@@ -208,6 +240,7 @@ document.addEventListener('DOMContentLoaded', () => {
   // Bind Top Sync Control Bar Events
   const btnTopLoadMore = document.getElementById('btn-top-load-more');
   const selectFetchLimit = document.getElementById('select-fetch-limit');
+  const btnMarkAllRead = document.getElementById('btn-mark-all-read');
   if (btnTopLoadMore) {
     btnTopLoadMore.addEventListener('click', () => loadMoreFromServer({ amount: 500 }));
   }
@@ -217,6 +250,22 @@ document.addEventListener('DOMContentLoaded', () => {
       loadMoreFromServer({ targetSize: val });
     });
   }
+  if (btnMarkAllRead) {
+    btnMarkAllRead.addEventListener('click', markAllMailsAsRead);
+  }
+
+  // Auto refresh every 30 minutes (30 * 60 * 1000 ms)
+  const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
+  setInterval(() => {
+    const refreshBtn = document.getElementById('btn-refresh');
+    if (refreshBtn && !refreshBtn.disabled) {
+      console.log('[Auto-Refresh] 30분 주기 메일 자동 새로고침 실행');
+      refreshBtn.click();
+    }
+  }, AUTO_REFRESH_INTERVAL_MS);
+
+  // Initialize Clipboard Image Pasting and File Attachments
+  initAttachmentAndPasteHandlers();
 });
 
 // Resizable Split Pane Logic
@@ -436,6 +485,133 @@ async function loadMoreFromServer(options = { amount: 500 }) {
   }
 }
 
+// Read & Reply Status Management (Stored in localStorage)
+function getReadMailKeys() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('mail_read_keys') || '[]'));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function getRepliedMailKeys() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('mail_replied_keys') || '[]'));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function getMailKey(email) {
+  if (!email) return '';
+  return email.uniqueId || String(email.id);
+}
+
+function markMailAsRead(email) {
+  const key = getMailKey(email);
+  if (!key) return;
+  const readSet = getReadMailKeys();
+  if (!readSet.has(key)) {
+    readSet.add(key);
+    try {
+      localStorage.setItem('mail_read_keys', JSON.stringify(Array.from(readSet)));
+    } catch (e) {
+      console.warn('Failed to save read status to localStorage', e);
+    }
+  }
+  updateMailItemStatusUI(key, true, null);
+}
+
+function markAllMailsAsRead() {
+  if (!emailsList || emailsList.length === 0) {
+    showToast('읽음 처리할 메일이 없습니다.', 'info');
+    return;
+  }
+  const readSet = getReadMailKeys();
+  let addedCount = 0;
+  emailsList.forEach(email => {
+    const key = getMailKey(email);
+    if (key && !readSet.has(key)) {
+      readSet.add(key);
+      addedCount++;
+    }
+  });
+
+  try {
+    localStorage.setItem('mail_read_keys', JSON.stringify(Array.from(readSet)));
+  } catch (e) {
+    console.warn('Failed to save read status to localStorage', e);
+  }
+
+  // Update UI for all mail items in DOM
+  document.querySelectorAll('.mail-item').forEach(item => {
+    item.classList.add('read');
+    item.classList.remove('unread');
+    const readBadge = item.querySelector('.mail-status-read');
+    if (readBadge) {
+      readBadge.className = 'mail-status-badge mail-status-read is-read';
+      readBadge.title = '읽음';
+      readBadge.innerHTML = '<i data-lucide="mail-open"></i>';
+    }
+  });
+  lucide.createIcons();
+  showToast(`메일 ${emailsList.length}개를 모두 읽음 처리했습니다.`, 'success');
+}
+
+function markMailAsReplied(email) {
+  const key = getMailKey(email);
+  if (!key) return;
+  const repliedSet = getRepliedMailKeys();
+  if (!repliedSet.has(key)) {
+    repliedSet.add(key);
+    try {
+      localStorage.setItem('mail_replied_keys', JSON.stringify(Array.from(repliedSet)));
+    } catch (e) {
+      console.warn('Failed to save replied status to localStorage', e);
+    }
+  }
+  updateMailItemStatusUI(key, null, true);
+}
+
+function updateMailItemStatusUI(mailKey, isRead, isReplied) {
+  let item = document.querySelector(`.mail-item[data-key="${mailKey}"]`);
+  if (!item) {
+    item = document.querySelector(`.mail-item[data-id="${mailKey}"]`);
+  }
+  if (!item) return;
+
+  if (isRead !== null) {
+    if (isRead) {
+      item.classList.add('read');
+      item.classList.remove('unread');
+      const readBadge = item.querySelector('.mail-status-read');
+      if (readBadge) {
+        readBadge.className = 'mail-status-badge mail-status-read is-read';
+        readBadge.title = '읽음';
+        readBadge.innerHTML = '<i data-lucide="mail-open"></i>';
+      }
+    }
+  }
+
+  if (isReplied !== null) {
+    if (isReplied) {
+      item.classList.add('replied');
+      let repliedBadge = item.querySelector('.mail-status-replied');
+      if (!repliedBadge) {
+        const badgesContainer = item.querySelector('.mail-status-badges');
+        if (badgesContainer) {
+          repliedBadge = document.createElement('span');
+          repliedBadge.className = 'mail-status-badge mail-status-replied is-replied';
+          repliedBadge.title = '회신 완료';
+          repliedBadge.innerHTML = '<i data-lucide="corner-up-left"></i>';
+          badgesContainer.prepend(repliedBadge);
+        }
+      }
+    }
+  }
+  lucide.createIcons();
+}
+
 // Render Emails to Sidebar
 function renderMailList(emails) {
   const mailListContainer = document.getElementById('mail-list');
@@ -452,12 +628,20 @@ function renderMailList(emails) {
     return;
   }
 
+  const readSet = getReadMailKeys();
+  const repliedSet = getRepliedMailKeys();
+
   // Render individual email items
   emails.forEach(email => {
     const item = document.createElement('div');
-    item.className = 'mail-item';
+    const mailKey = getMailKey(email);
+    const isRead = readSet.has(mailKey);
+    const isReplied = repliedSet.has(mailKey);
+
+    item.className = `mail-item ${isRead ? 'read' : 'unread'} ${isReplied ? 'replied' : ''}`;
     item.dataset.id = email.id;
-    if (selectedEmail && selectedEmail.id === email.id) {
+    item.dataset.key = mailKey;
+    if (selectedEmail && (selectedEmail.id === email.id || (selectedEmail.uniqueId && selectedEmail.uniqueId === email.uniqueId))) {
       item.classList.add('active');
     }
 
@@ -467,14 +651,26 @@ function renderMailList(emails) {
     item.innerHTML = `
       <div class="mail-item-header">
         <span class="mail-sender" title="${email.from}">${displaySender}</span>
-        <span class="mail-date">${displayDate}</span>
+        <div class="mail-header-right">
+          <span class="mail-date">${displayDate}</span>
+          <div class="mail-status-badges">
+            ${isReplied ? `<span class="mail-status-badge mail-status-replied is-replied" title="회신 완료"><i data-lucide="corner-up-left"></i></span>` : ''}
+            <span class="mail-status-badge mail-status-read ${isRead ? 'is-read' : 'is-unread'}" title="${isRead ? '읽음' : '읽지 않음'}">
+              <i data-lucide="${isRead ? 'mail-open' : 'mail'}"></i>
+            </span>
+          </div>
+        </div>
       </div>
       <div class="mail-subject" title="${email.subject}">${email.subject}</div>
     `;
 
-    item.addEventListener('click', () => selectEmail(email.id));
+    item.addEventListener('click', () => {
+      markMailAsRead(email);
+      selectEmail(email.id);
+    });
     mailListContainer.appendChild(item);
   });
+  lucide.createIcons();
 
   // If there are more emails to fetch within current cache, append "Load More" button
   if (emailsList.length < totalMailCount) {
@@ -543,6 +739,12 @@ function openNewMailCompose() {
   // Update prompt editor
   updateNewEmailPromptEditor();
 
+  // Pre-populate compose CC with default taeyoung@ilogen.com if empty
+  const composeCc = document.getElementById('compose-cc');
+  if (composeCc && !composeCc.value.trim()) {
+    composeCc.value = 'taeyoung@ilogen.com';
+  }
+
   // Focus guide input
   setTimeout(() => {
     const focusTarget = document.getElementById('compose-recipient-info');
@@ -552,9 +754,69 @@ function openNewMailCompose() {
   lucide.createIcons();
 }
 
+// Apply recipients based on reply mode ('reply' or 'reply-all')
+function applyReplyModeRecipients() {
+  if (!selectedEmail) return;
+
+  const btnModeReply = document.getElementById('btn-mode-reply');
+  const btnModeReplyAll = document.getElementById('btn-mode-reply-all');
+  if (btnModeReply && btnModeReplyAll) {
+    if (currentReplyMode === 'reply-all') {
+      btnModeReplyAll.classList.add('active');
+      btnModeReply.classList.remove('active');
+    } else {
+      btnModeReply.classList.add('active');
+      btnModeReplyAll.classList.remove('active');
+    }
+  }
+
+  const senderEmail = extractEmailAddress(selectedEmail.from);
+  document.getElementById('draft-to').value = senderEmail;
+
+  const defaultMyEmail = 'taeyoung@ilogen.com';
+  const ccList = [defaultMyEmail];
+
+  if (currentReplyMode === 'reply-all') {
+    // Collect all To and CC participants from original email, excluding myself and the sender (already in To)
+    const allParticipants = [
+      ...parseEmailList(selectedEmail.to),
+      ...parseEmailList(selectedEmail.cc)
+    ];
+
+    allParticipants.forEach(p => {
+      const email = p.email.toLowerCase();
+      if (email !== senderEmail.toLowerCase() && email !== defaultMyEmail.toLowerCase()) {
+        if (!ccList.some(item => item.toLowerCase() === email)) {
+          ccList.push(p.email);
+        }
+      }
+    });
+  }
+
+  document.getElementById('draft-cc').value = ccList.join(', ');
+}
+
+function setReplyMode(mode) {
+  currentReplyMode = mode;
+  applyReplyModeRecipients();
+}
+
+function formatFileSize(bytes) {
+  if (!bytes || bytes <= 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${units[i]}`;
+}
+
 // Select and Fetch Single Email Detail
 async function selectEmail(id) {
   isComposingNewMail = false;
+
+  // Immediately mark as read from existing in-memory emailsList
+  const foundEmail = emailsList.find(e => e.id === id);
+  if (foundEmail) {
+    markMailAsRead(foundEmail);
+  }
 
   // Update active class in sidebar
   document.querySelectorAll('.mail-item').forEach(item => {
@@ -585,9 +847,10 @@ async function selectEmail(id) {
   document.getElementById('draft-box').classList.add('disabled');
   document.getElementById('reply-guide').value = '';
   document.getElementById('draft-to').value = '';
-  document.getElementById('draft-cc').value = '';
+  document.getElementById('draft-cc').value = 'taeyoung@ilogen.com';
   document.getElementById('draft-subject').value = '';
   document.getElementById('draft-body').value = '';
+  clearReplyAttachments();
 
   // Reset Chat Panel
   chatHistory = [];
@@ -616,15 +879,55 @@ async function selectEmail(id) {
     }
 
     selectedEmail = data;
+    markMailAsRead(data);
     
-    // Pre-populate recipient To and clear CC
-    document.getElementById('draft-to').value = extractEmailAddress(data.from);
-    document.getElementById('draft-cc').value = '';
+    // Apply recipients according to current reply mode (default: reply, with Cc: taeyoung@ilogen.com)
+    applyReplyModeRecipients();
 
     // Set header info
     document.getElementById('detail-subject').textContent = data.subject || '(제목 없음)';
     document.getElementById('detail-from').textContent = data.from || '';
     document.getElementById('detail-to').textContent = data.to || '';
+
+    // Render CC header if exists
+    const ccRow = document.getElementById('detail-cc-row');
+    const ccSpan = document.getElementById('detail-cc');
+    if (ccRow && ccSpan) {
+      if (data.cc && data.cc.trim()) {
+        ccSpan.textContent = data.cc;
+        ccRow.classList.remove('hidden');
+      } else {
+        ccSpan.textContent = '';
+        ccRow.classList.add('hidden');
+      }
+    }
+
+    // Render Attachments header if exists
+    const attRow = document.getElementById('detail-attachments-row');
+    const attList = document.getElementById('detail-attachments-list');
+    if (attRow && attList) {
+      attList.innerHTML = '';
+      if (data.attachments && data.attachments.length > 0) {
+        attRow.classList.remove('hidden');
+        data.attachments.forEach(att => {
+          const pill = document.createElement('a');
+          pill.className = 'attachment-pill';
+          pill.href = `/api/emails/${data.id}/attachments/${att.id}`;
+          pill.setAttribute('download', att.filename);
+          pill.title = `${att.filename} 다운로드 (${formatFileSize(att.size)})`;
+          pill.innerHTML = `
+            <i data-lucide="download"></i>
+            <span>${att.filename}</span>
+            <span class="att-size">(${formatFileSize(att.size)})</span>
+          `;
+          attList.appendChild(pill);
+        });
+        lucide.createIcons();
+      } else {
+        attRow.classList.add('hidden');
+      }
+    }
+
     document.getElementById('detail-date').textContent = formatDate(data.date, true);
 
     // Show body
@@ -726,7 +1029,15 @@ async function generateAIDraft() {
 
     // Set draft box inputs
     document.getElementById('draft-subject').value = data.subject || `Re: ${selectedEmail.subject}`;
-    document.getElementById('draft-body').value = data.body || '';
+    
+    // Build draft body with quoted email history below
+    let generatedBody = data.body || '';
+    if (selectedEmail) {
+      const quoteHeader = `\n\n----- Original Message -----\nFrom: ${selectedEmail.from || ''}\nTo: ${selectedEmail.to || ''}${selectedEmail.cc ? '\nCc: ' + selectedEmail.cc : ''}\nSent: ${formatDate(selectedEmail.date, true)}\nSubject: ${selectedEmail.subject || ''}\n\n`;
+      const originalContent = (selectedEmail.text || '').trim();
+      generatedBody += quoteHeader + originalContent;
+    }
+    document.getElementById('draft-body').value = generatedBody;
 
     // Enable draft panel
     document.getElementById('draft-box').classList.remove('disabled');
@@ -810,7 +1121,9 @@ async function sendReplyEmail() {
         to: toEmail,
         cc: ccEmail,
         subject: subject,
-        body: body
+        body: body,
+        attachments: replyAttachments,
+        inlineImages: replyInlineImages
       })
     });
 
@@ -818,6 +1131,10 @@ async function sendReplyEmail() {
 
     if (!response.ok) {
       throw new Error(data.error || '메일 발송에 실패했습니다.');
+    }
+
+    if (selectedEmail) {
+      markMailAsReplied(selectedEmail);
     }
 
     showToast('답장 메일이 성공적으로 전송되었습니다!', 'success');
@@ -1000,6 +1317,7 @@ function switchWorkspaceMode(mode) {
   const modeMessengerBtn = document.getElementById('mode-messenger');
   const mailComposeBtnContainer = document.getElementById('mail-compose-btn-container');
   const mailSearchContainer = document.getElementById('mail-search-container');
+  const mailSyncBarContainer = document.getElementById('mail-sync-bar-container');
   const mailSidebarContent = document.getElementById('mail-sidebar-content');
   const messengerSidebarContent = document.getElementById('messenger-sidebar-content');
   const messengerPanel = document.getElementById('messenger-panel');
@@ -1012,7 +1330,8 @@ function switchWorkspaceMode(mode) {
     modeMailBtn.classList.add('active');
     modeMessengerBtn.classList.remove('active');
     if (mailComposeBtnContainer) mailComposeBtnContainer.classList.remove('hidden');
-    mailSearchContainer.classList.remove('hidden');
+    if (mailSearchContainer) mailSearchContainer.classList.remove('hidden');
+    if (mailSyncBarContainer) mailSyncBarContainer.classList.remove('hidden');
     mailSidebarContent.classList.remove('hidden');
     messengerSidebarContent.classList.add('hidden');
     messengerPanel.classList.add('hidden');
@@ -1036,7 +1355,8 @@ function switchWorkspaceMode(mode) {
     modeMessengerBtn.classList.add('active');
     modeMailBtn.classList.remove('active');
     if (mailComposeBtnContainer) mailComposeBtnContainer.classList.add('hidden');
-    mailSearchContainer.classList.add('hidden');
+    if (mailSearchContainer) mailSearchContainer.classList.add('hidden');
+    if (mailSyncBarContainer) mailSyncBarContainer.classList.add('hidden');
     mailSidebarContent.classList.add('hidden');
     messengerSidebarContent.classList.remove('hidden');
     messengerPanel.classList.remove('hidden');
@@ -1285,7 +1605,9 @@ async function sendNewMailEmail() {
         to: toEmail,
         cc: ccEmail,
         subject: subject,
-        body: body
+        body: body,
+        attachments: composeAttachments,
+        inlineImages: composeInlineImages
       })
     });
 
@@ -1643,5 +1965,240 @@ function initPromptTuningUI() {
       showToast('기본 프롬프트 템플릿으로 복원되었습니다.', 'info');
     });
   }
+}
+
+// -----------------------------------------------------------------------------
+// Attachment & Clipboard Image Pasting Handlers
+// -----------------------------------------------------------------------------
+function initAttachmentAndPasteHandlers() {
+  // 1. Reply Draft Attachments & Paste
+  const draftBody = document.getElementById('draft-body');
+  const replyFileInput = document.getElementById('reply-file-input');
+  const btnReplyAttach = document.getElementById('btn-reply-attach-file');
+
+  if (btnReplyAttach && replyFileInput) {
+    btnReplyAttach.addEventListener('click', () => replyFileInput.click());
+    replyFileInput.addEventListener('change', (e) => {
+      handleFileSelection(e.target.files, 'reply');
+      replyFileInput.value = ''; // Reset input to allow re-selecting same file
+    });
+  }
+
+  if (draftBody) {
+    draftBody.addEventListener('paste', (e) => {
+      handleClipboardPaste(e, draftBody, 'reply');
+    });
+  }
+
+  // 2. Compose (New Mail) Attachments & Paste
+  const composeBody = document.getElementById('compose-body');
+  const composeFileInput = document.getElementById('compose-file-input');
+  const btnComposeAttach = document.getElementById('btn-compose-attach-file');
+
+  if (btnComposeAttach && composeFileInput) {
+    btnComposeAttach.addEventListener('click', () => composeFileInput.click());
+    composeFileInput.addEventListener('change', (e) => {
+      handleFileSelection(e.target.files, 'compose');
+      composeFileInput.value = '';
+    });
+  }
+
+  if (composeBody) {
+    composeBody.addEventListener('paste', (e) => {
+      handleClipboardPaste(e, composeBody, 'compose');
+    });
+  }
+}
+
+// Handle Clipboard Paste for Images
+function handleClipboardPaste(e, textareaEl, context = 'reply') {
+  const clipboardData = e.clipboardData || window.clipboardData;
+  if (!clipboardData || !clipboardData.items) return;
+
+  for (let i = 0; i < clipboardData.items.length; i++) {
+    const item = clipboardData.items[i];
+    if (item.type.indexOf('image') !== -1) {
+      const file = item.getAsFile();
+      if (!file) continue;
+
+      e.preventDefault(); // Prevent pasting raw junk into textarea
+
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const base64Data = event.target.result;
+        const imgId = 'img_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
+        const imageToken = `\n[이미지: ${imgId}]\n`;
+
+        const imageObj = {
+          cid: imgId,
+          filename: `pasted_image_${Date.now()}.png`,
+          data: base64Data,
+          size: file.size,
+          contentType: file.type || 'image/png'
+        };
+
+        if (context === 'reply') {
+          replyInlineImages.push(imageObj);
+          renderAttachmentChips('reply');
+        } else {
+          composeInlineImages.push(imageObj);
+          renderAttachmentChips('compose');
+        }
+
+        // Insert placeholder token at current cursor position in textarea
+        insertTextAtCursor(textareaEl, imageToken);
+        showToast('클립보드 이미지가 본문에 삽입되었습니다!', 'success');
+      };
+      reader.readAsDataURL(file);
+      break; // Process one image per paste event
+    }
+  }
+}
+
+// Helper: Insert text at current cursor position of textarea
+function insertTextAtCursor(textarea, text) {
+  const startPos = textarea.selectionStart;
+  const endPos = textarea.selectionEnd;
+  const val = textarea.value;
+  textarea.value = val.substring(0, startPos) + text + val.substring(endPos, val.length);
+  textarea.selectionStart = textarea.selectionEnd = startPos + text.length;
+  textarea.focus();
+}
+
+// Handle File Selection (docx, xlsx, pdf, zip, etc.)
+function handleFileSelection(files, context = 'reply') {
+  if (!files || files.length === 0) return;
+
+  const maxFileSize = 25 * 1024 * 1024; // 25MB per file
+  Array.from(files).forEach(file => {
+    if (file.size > maxFileSize) {
+      showToast(`'${file.name}' 파일이 너무 큽니다. (최대 25MB)`, 'error');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = function(event) {
+      const base64Data = event.target.result;
+      const fileObj = {
+        filename: file.name,
+        data: base64Data,
+        size: file.size,
+        contentType: file.type || 'application/octet-stream'
+      };
+
+      if (context === 'reply') {
+        replyAttachments.push(fileObj);
+        renderAttachmentChips('reply');
+      } else {
+        composeAttachments.push(fileObj);
+        renderAttachmentChips('compose');
+      }
+
+      showToast(`'${file.name}' 첨부 완료`, 'info');
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// Render attachment chips
+function renderAttachmentChips(context = 'reply') {
+  const containerId = context === 'reply' ? 'reply-attachment-list' : 'compose-attachment-list';
+  const container = document.getElementById(containerId);
+  if (!container) return;
+
+  const attachments = context === 'reply' ? replyAttachments : composeAttachments;
+  const inlineImages = context === 'reply' ? replyInlineImages : composeInlineImages;
+
+  const totalCount = attachments.length + inlineImages.length;
+  if (totalCount === 0) {
+    container.innerHTML = '';
+    container.classList.add('hidden');
+    return;
+  }
+
+  container.classList.remove('hidden');
+  container.innerHTML = '';
+
+  // 1. Render inline images
+  inlineImages.forEach((img, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'attachment-chip is-image';
+    chip.title = `본문에 [이미지: ${img.cid}] 태그로 표시됩니다.`;
+
+    chip.innerHTML = `
+      <img src="${img.data}" class="attachment-chip-thumb" alt="미리보기" />
+      <span class="attachment-chip-name">이미지 (${img.cid})</span>
+      <span class="attachment-chip-size">${formatFileSize(img.size)}</span>
+      <button type="button" class="attachment-chip-remove" title="이미지 삭제">
+        <i data-lucide="x"></i>
+      </button>
+    `;
+
+    const removeBtn = chip.querySelector('.attachment-chip-remove');
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      // Remove token from textarea
+      const textarea = document.getElementById(context === 'reply' ? 'draft-body' : 'compose-body');
+      if (textarea) {
+        const token = `[이미지: ${img.cid}]`;
+        textarea.value = textarea.value.replace(token, '').trim();
+      }
+      inlineImages.splice(idx, 1);
+      renderAttachmentChips(context);
+    });
+
+    container.appendChild(chip);
+  });
+
+  // 2. Render files (docx, xlsx, etc.)
+  attachments.forEach((file, idx) => {
+    const chip = document.createElement('div');
+    chip.className = 'attachment-chip';
+    chip.title = `${file.filename} (${formatFileSize(file.size)})`;
+
+    let iconName = 'file-text';
+    const ext = file.filename.split('.').pop().toLowerCase();
+    if (['xlsx', 'xls', 'csv'].includes(ext)) {
+      iconName = 'sheet';
+    } else if (['docx', 'doc'].includes(ext)) {
+      iconName = 'file-text';
+    } else if (ext === 'pdf') {
+      iconName = 'file';
+    } else if (['zip', 'rar', '7z'].includes(ext)) {
+      iconName = 'archive';
+    }
+
+    chip.innerHTML = `
+      <span class="attachment-chip-icon"><i data-lucide="${iconName}"></i></span>
+      <span class="attachment-chip-name">${file.filename}</span>
+      <span class="attachment-chip-size">${formatFileSize(file.size)}</span>
+      <button type="button" class="attachment-chip-remove" title="첨부 삭제">
+        <i data-lucide="x"></i>
+      </button>
+    `;
+
+    const removeBtn = chip.querySelector('.attachment-chip-remove');
+    removeBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      attachments.splice(idx, 1);
+      renderAttachmentChips(context);
+    });
+
+    container.appendChild(chip);
+  });
+
+  lucide.createIcons();
+}
+
+function clearReplyAttachments() {
+  replyAttachments = [];
+  replyInlineImages = [];
+  renderAttachmentChips('reply');
+}
+
+function clearComposeAttachments() {
+  composeAttachments = [];
+  composeInlineImages = [];
+  renderAttachmentChips('compose');
 }
 
