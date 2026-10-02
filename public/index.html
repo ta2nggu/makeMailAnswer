@@ -143,20 +143,34 @@
             </div>
           </div>
           <div class="mail-detail-card">
-            <div class="mail-detail-header">
-              <h2 id="detail-subject">제목 없음</h2>
-              <div class="mail-meta">
+            <div class="mail-detail-header" id="mail-detail-header">
+              <div class="mail-header-top-row">
+                <h2 id="detail-subject">제목 없음</h2>
+                <button type="button" id="btn-toggle-mail-header" class="btn-toggle-header" title="헤더 상세 정보 접기/펼치기">
+                  <span id="header-toggle-text">간략히</span>
+                  <i data-lucide="chevron-up" id="header-toggle-icon"></i>
+                </button>
+              </div>
+
+              <!-- Compact summary bar (visible when collapsed or as quick glance) -->
+              <div class="header-summary-row" id="header-summary-row">
+                <span class="summary-sender" id="summary-sender"></span>
+                <div class="summary-badges" id="summary-badges"></div>
+              </div>
+
+              <!-- Collapsible detailed meta rows -->
+              <div class="mail-meta" id="mail-meta-details">
                 <div class="meta-row">
                   <span class="meta-label">보낸 사람:</span>
                   <span id="detail-from" class="meta-value"></span>
                 </div>
                 <div class="meta-row">
                   <span class="meta-label">받는 사람:</span>
-                  <span id="detail-to" class="meta-value"></span>
+                  <span id="detail-to" class="meta-value scrollable-meta"></span>
                 </div>
                 <div class="meta-row" id="detail-cc-row">
                   <span class="meta-label">참조 (Cc):</span>
-                  <span id="detail-cc" class="meta-value"></span>
+                  <span id="detail-cc" class="meta-value scrollable-meta"></span>
                 </div>
                 <div class="meta-row">
                   <span class="meta-label">받은 시간:</span>
@@ -164,7 +178,7 @@
                 </div>
                 <div class="meta-row meta-attachments-row hidden" id="detail-attachments-row">
                   <span class="meta-label">첨부 파일:</span>
-                  <div id="detail-attachments-list" class="attachments-pill-list"></div>
+                  <div id="detail-attachments-list" class="attachments-pill-list scrollable-attachments"></div>
                 </div>
               </div>
             </div>

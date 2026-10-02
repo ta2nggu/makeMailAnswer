@@ -271,6 +271,9 @@ document.addEventListener('DOMContentLoaded', () => {
   // Infinite Scroll on Sidebar Mail List (Automatically trigger load more when reaching bottom)
   initMailSidebarInfiniteScroll();
 
+  // Initialize Mail Detail Header Collapsible Toggle
+  initMailDetailHeaderToggle();
+
   // Initialize Clipboard Image Pasting and File Attachments
   initAttachmentAndPasteHandlers();
 });
@@ -749,6 +752,70 @@ function initMailSidebarInfiniteScroll() {
   });
 }
 
+// Mail Detail Header Collapsible Toggle Logic
+let isMailHeaderCollapsed = false;
+function initMailDetailHeaderToggle() {
+  const btnToggle = document.getElementById('btn-toggle-mail-header');
+  const headerEl = document.getElementById('mail-detail-header');
+  const toggleText = document.getElementById('header-toggle-text');
+
+  if (btnToggle && headerEl) {
+    btnToggle.addEventListener('click', () => {
+      isMailHeaderCollapsed = !isMailHeaderCollapsed;
+      if (isMailHeaderCollapsed) {
+        headerEl.classList.add('collapsed');
+        if (toggleText) toggleText.textContent = '자세히';
+      } else {
+        headerEl.classList.remove('collapsed');
+        if (toggleText) toggleText.textContent = '간략히';
+      }
+      lucide.createIcons();
+    });
+  }
+}
+
+// Update Header Summary Bar with Sender, Date, and Badges (CC count, Attachments count)
+function updateHeaderSummaryBar(emailData) {
+  const summarySender = document.getElementById('summary-sender');
+  const summaryBadges = document.getElementById('summary-badges');
+  if (!summarySender || !summaryBadges) return;
+
+  summarySender.textContent = emailData.from || '';
+  summarySender.title = emailData.from || '';
+
+  summaryBadges.innerHTML = '';
+
+  // 1. Date badge
+  if (emailData.date) {
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'summary-badge';
+    dateSpan.innerHTML = `<i data-lucide="clock"></i> ${formatDate(emailData.date, false)}`;
+    summaryBadges.appendChild(dateSpan);
+  }
+
+  // 2. CC Count Badge
+  if (emailData.cc && emailData.cc.trim()) {
+    const ccList = parseEmailList(emailData.cc);
+    const count = ccList.length || emailData.cc.split(',').length;
+    const ccBadge = document.createElement('span');
+    ccBadge.className = 'summary-badge';
+    ccBadge.title = `참조: ${emailData.cc}`;
+    ccBadge.innerHTML = `<i data-lucide="users"></i> 참조 ${count}명`;
+    summaryBadges.appendChild(ccBadge);
+  }
+
+  // 3. Attachments Badge
+  if (emailData.attachments && emailData.attachments.length > 0) {
+    const attBadge = document.createElement('span');
+    attBadge.className = 'summary-badge has-attachments';
+    attBadge.title = `첨부파일 ${emailData.attachments.length}개`;
+    attBadge.innerHTML = `<i data-lucide="paperclip"></i> 첨부 ${emailData.attachments.length}개`;
+    summaryBadges.appendChild(attBadge);
+  }
+
+  lucide.createIcons();
+}
+
 // Open New Mail Composer
 function openNewMailCompose() {
   isComposingNewMail = true;
@@ -872,6 +939,8 @@ async function selectEmail(id) {
   `;
   mailBodyHtml.classList.add('hidden');
   mailBodyText.classList.remove('hidden');
+  const mailDetailBodyEl = document.querySelector('.mail-detail-body');
+  if (mailDetailBodyEl) mailDetailBodyEl.classList.remove('has-html');
 
   // Toggle workspaces
   document.getElementById('welcome-panel').classList.add('hidden');
@@ -965,25 +1034,47 @@ async function selectEmail(id) {
 
     document.getElementById('detail-date').textContent = formatDate(data.date, true);
 
+    // Update compact summary row with sender and badges
+    updateHeaderSummaryBar(data);
+
     // Show body
+    const mailDetailBodyEl = document.querySelector('.mail-detail-body');
     if (data.html && data.html.trim() !== '' && data.html !== data.text) {
+      if (mailDetailBodyEl) mailDetailBodyEl.classList.add('has-html');
       mailBodyText.classList.add('hidden');
       mailBodyHtml.classList.remove('hidden');
       // Render HTML safely inside iframe to isolate styling
       const iframeDoc = mailBodyHtml.contentDocument || mailBodyHtml.contentWindow.document;
       iframeDoc.open();
       iframeDoc.write(`
+        <!DOCTYPE html>
         <html>
           <head>
+            <meta charset="utf-8">
             <style>
+              html {
+                margin: 0 !important;
+                padding: 0 !important;
+                height: 100%;
+                box-sizing: border-box;
+              }
               body { 
                 font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
                 font-size: 14px; 
                 line-height: 1.6; 
                 color: #333333; 
-                margin: 8px;
+                margin: 0 !important;
+                padding: 0 8px 60px 8px !important; /* Zero top padding eliminates upper gap; 60px bottom padding guarantees scrolling to the very end */
+                box-sizing: border-box;
+                min-height: 100%;
+              }
+              /* Eliminate first child element's excess top margin that pushes content down */
+              body > :first-child {
+                margin-top: 0 !important;
               }
               a { color: #2563eb; }
+              img { max-width: 100%; height: auto; }
+              table { max-width: 100% !important; }
             </style>
           </head>
           <body>${data.html}</body>
@@ -991,6 +1082,7 @@ async function selectEmail(id) {
       `);
       iframeDoc.close();
     } else {
+      if (mailDetailBodyEl) mailDetailBodyEl.classList.remove('has-html');
       mailBodyHtml.classList.add('hidden');
       mailBodyText.classList.remove('hidden');
       mailBodyText.textContent = data.text || '(본문 내용이 없습니다)';

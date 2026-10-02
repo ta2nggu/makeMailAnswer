@@ -623,6 +623,7 @@ body {
   padding: 0.85rem 1rem;
   gap: 0.6rem;
   border-right: 1px solid var(--border-color);
+  min-height: 0; /* Important: allows flex children to shrink/scroll properly without overflowing viewport */
 }
 
 .ai-assistant-section {
@@ -667,60 +668,206 @@ body {
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--shadow-sm);
+  min-height: 0; /* Important: prevents card from expanding beyond container and clipping bottom */
 }
 
 .mail-detail-header {
-  padding: 0.85rem 1rem;
+  padding: 0.65rem 0.9rem;
   border-bottom: 1px solid var(--border-color);
-  background-color: rgba(0, 0, 0, 0.01);
+  background-color: rgba(0, 0, 0, 0.015);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
-.mail-detail-header h2 {
-  font-size: 1.05rem;
+.mail-header-top-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.mail-header-top-row h2 {
+  font-size: 0.98rem;
   font-weight: 700;
-  margin-bottom: 0.5rem;
+  margin: 0;
   line-height: 1.35;
+  color: var(--text-primary);
+  flex: 1;
+  word-break: break-word;
 }
 
+.btn-toggle-header {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.18rem 0.45rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.btn-toggle-header:hover {
+  background-color: #ffffff;
+  color: var(--primary-color, #6366f1);
+  border-color: var(--primary-color, #6366f1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.btn-toggle-header svg {
+  width: 12px;
+  height: 12px;
+  transition: transform 0.2s ease;
+}
+
+/* Header Summary Bar (Visible in compact view) */
+.header-summary-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.summary-sender {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 65%;
+}
+
+.summary-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.summary-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  background-color: rgba(0, 0, 0, 0.04);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.summary-badge.has-attachments {
+  background-color: rgba(99, 102, 241, 0.1);
+  color: var(--primary-color, #4f46e5);
+  border-color: rgba(99, 102, 241, 0.25);
+  font-weight: 600;
+}
+
+.summary-badge svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Collapsible Detailed Meta Rules */
 .mail-meta {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
   font-size: 0.78rem;
+  margin-top: 0.2rem;
+  transition: max-height 0.25s ease, opacity 0.2s ease;
+}
+
+.mail-detail-header.collapsed .mail-meta {
+  display: none;
+}
+
+.mail-detail-header.collapsed {
+  padding-bottom: 0.5rem;
+}
+
+.mail-detail-header.collapsed .btn-toggle-header svg {
+  transform: rotate(180deg);
 }
 
 .meta-row {
   display: flex;
+  align-items: flex-start;
   gap: 0.5rem;
 }
 
 .meta-label {
   color: var(--text-muted);
   width: 65px;
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 0.75rem;
+  padding-top: 1px;
 }
 
 .meta-value {
   color: var(--text-secondary);
+  flex: 1;
+  word-break: break-all;
+}
+
+/* Scrollable Meta Values when too many recipients or CCs */
+.scrollable-meta {
+  max-height: 52px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.scrollable-attachments {
+  max-height: 70px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .mail-detail-body {
   flex: 1;
   overflow-y: auto;
-  padding: 0.85rem 1rem;
+  padding: 0.4rem 0.6rem;
   background-color: #f8fafc;
   line-height: 1.5;
   font-size: 0.85rem;
   white-space: pre-wrap;
   word-break: break-all;
   color: #334155;
+  min-height: 0; /* Important: prevents overflow clipping in flex container */
+}
+
+/* When iframe is active, remove container scroll and padding to eliminate double scrollbars */
+.mail-detail-body.has-html,
+.mail-detail-body:has(.mail-body-html:not(.hidden)) {
+  padding: 0;
+  overflow: hidden;
+  background-color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  height: 100%;
 }
 
 .mail-body-html {
   width: 100%;
+  flex: 1;
   height: 100%;
+  min-height: 0;
   border: none;
   background: white;
-  border-radius: 8px;
+  display: block;
 }
 
 /* AI Assistant Boxes */
