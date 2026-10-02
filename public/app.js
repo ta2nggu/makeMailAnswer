@@ -98,6 +98,10 @@ document.addEventListener('DOMContentLoaded', () => {
   if (btnGenerate) {
     btnGenerate.addEventListener('click', generateAIDraft);
   }
+  const btnDirectReply = document.getElementById('btn-direct-reply');
+  if (btnDirectReply) {
+    btnDirectReply.addEventListener('click', openDirectReplyDraft);
+  }
   const btnCopy = document.getElementById('btn-copy');
   if (btnCopy) {
     btnCopy.addEventListener('click', copyDraftToClipboard);
@@ -263,6 +267,9 @@ document.addEventListener('DOMContentLoaded', () => {
       refreshBtn.click();
     }
   }, AUTO_REFRESH_INTERVAL_MS);
+
+  // Infinite Scroll on Sidebar Mail List (Automatically trigger load more when reaching bottom)
+  initMailSidebarInfiniteScroll();
 
   // Initialize Clipboard Image Pasting and File Attachments
   initAttachmentAndPasteHandlers();
@@ -714,6 +721,34 @@ function renderMailList(emails) {
   }
 }
 
+// Infinite Scroll logic for sidebar mail list
+let isScrollThrottled = false;
+function initMailSidebarInfiniteScroll() {
+  const sidebarContent = document.getElementById('mail-sidebar-content');
+  if (!sidebarContent) return;
+
+  sidebarContent.addEventListener('scroll', () => {
+    // Only check if we are in mail mode, not currently loading, and there are more emails in current cache
+    if (isScrollThrottled || isLoadingMore || emailsList.length >= totalMailCount) {
+      return;
+    }
+
+    const scrollTop = sidebarContent.scrollTop;
+    const scrollHeight = sidebarContent.scrollHeight;
+    const clientHeight = sidebarContent.clientHeight;
+
+    // Trigger when user scrolls within 120px of the bottom
+    if (scrollTop + clientHeight >= scrollHeight - 120) {
+      const loadMoreBtn = document.getElementById('btn-load-more');
+      if (loadMoreBtn && !loadMoreBtn.disabled) {
+        isScrollThrottled = true;
+        setTimeout(() => { isScrollThrottled = false; }, 300);
+        loadMoreBtn.click();
+      }
+    }
+  });
+}
+
 // Open New Mail Composer
 function openNewMailCompose() {
   isComposingNewMail = true;
@@ -1055,6 +1090,46 @@ async function generateAIDraft() {
     generateBtn.innerHTML = originalBtnHtml;
     lucide.createIcons();
   }
+}
+
+// Open Direct Reply Draft without AI generation
+function openDirectReplyDraft() {
+  if (!selectedEmail) {
+    showToast('답장을 작성할 메일을 먼저 선택해주세요.', 'error');
+    return;
+  }
+
+  // Set default subject if empty
+  const draftSubject = document.getElementById('draft-subject');
+  if (!draftSubject.value.trim()) {
+    draftSubject.value = `Re: ${selectedEmail.subject || ''}`;
+  }
+
+  // Ensure recipients are populated according to mode
+  applyReplyModeRecipients();
+
+  // If draft-body is empty or only has quote, prepare body with user's guide (if any) + quote history
+  const draftBody = document.getElementById('draft-body');
+  if (!draftBody.value.trim()) {
+    const guideText = document.getElementById('reply-guide').value.trim();
+    let initialText = guideText ? `${guideText}\n\n` : '';
+    if (selectedEmail) {
+      const quoteHeader = `\n\n----- Original Message -----\nFrom: ${selectedEmail.from || ''}\nTo: ${selectedEmail.to || ''}${selectedEmail.cc ? '\nCc: ' + selectedEmail.cc : ''}\nSent: ${formatDate(selectedEmail.date, true)}\nSubject: ${selectedEmail.subject || ''}\n\n`;
+      const originalContent = (selectedEmail.text || '').trim();
+      initialText += quoteHeader + originalContent;
+    }
+    draftBody.value = initialText;
+  }
+
+  // Enable draft box
+  const draftBox = document.getElementById('draft-box');
+  draftBox.classList.remove('disabled');
+
+  // Focus textarea
+  draftBody.focus();
+  draftBody.setSelectionRange(0, 0); // Place cursor at the very top for direct typing
+
+  showToast('답장 작성 칸이 활성화되었습니다. 바로 작성하세요!', 'info');
 }
 
 // Copy Reply text to Clipboard

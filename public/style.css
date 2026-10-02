@@ -829,16 +829,54 @@ textarea:focus {
   transform: translateY(-1px);
 }
 
+.reply-action-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
 .btn-generate {
+  flex: 1;
   background: var(--accent-gradient);
   color: white;
-  margin-top: 0.25rem;
+  margin-top: 0;
   box-shadow: 0 1px 3px rgba(99, 102, 241, 0.2);
 }
 
 .btn-generate:hover {
   box-shadow: 0 3px 8px rgba(99, 102, 241, 0.28);
   transform: translateY(-1px);
+}
+
+.btn-direct-reply {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.55rem 0.9rem;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.btn-direct-reply:hover {
+  background-color: #ffffff;
+  color: var(--primary-color, #6366f1);
+  border-color: var(--primary-color, #6366f1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.btn-direct-reply svg {
+  width: 14px;
+  height: 14px;
 }
 
 .btn-send {
