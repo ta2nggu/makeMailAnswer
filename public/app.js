@@ -12,6 +12,8 @@ let searchDebounceTimeout = null;
 let chatHistory = [];
 let isComposingNewMail = false;
 let currentMailFilter = 'all'; // 'all' or 'later'
+let isHideRead = localStorage.getItem('mail_hide_read') === 'true';
+let isHideReplied = localStorage.getItem('mail_hide_replied') === 'true';
 
 // Prompt Tuning State
 let defaultEmailPromptTemplate = '';
@@ -276,6 +278,39 @@ document.addEventListener('DOMContentLoaded', () => {
       currentMailFilter = 'later';
       btnFilterLater.classList.add('active');
       btnFilterAll.classList.remove('active');
+      renderMailList(emailsList);
+    });
+  }
+
+  // Bind Quick Hide Filters (Hide Read & Hide Replied)
+  const btnHideRead = document.getElementById('btn-hide-read');
+  const btnHideReplied = document.getElementById('btn-hide-replied');
+  if (btnHideRead) {
+    if (isHideRead) btnHideRead.classList.add('active');
+    btnHideRead.addEventListener('click', () => {
+      isHideRead = !isHideRead;
+      btnHideRead.classList.toggle('active', isHideRead);
+      try {
+        localStorage.setItem('mail_hide_read', isHideRead ? 'true' : 'false');
+      } catch (e) {
+        console.warn('Failed to save mail_hide_read', e);
+      }
+      showToast(isHideRead ? '읽은 메일을 목록에서 숨겼습니다.' : '읽은 메일을 다시 표시합니다.', 'info');
+      renderMailList(emailsList);
+    });
+  }
+
+  if (btnHideReplied) {
+    if (isHideReplied) btnHideReplied.classList.add('active');
+    btnHideReplied.addEventListener('click', () => {
+      isHideReplied = !isHideReplied;
+      btnHideReplied.classList.toggle('active', isHideReplied);
+      try {
+        localStorage.setItem('mail_hide_replied', isHideReplied ? 'true' : 'false');
+      } catch (e) {
+        console.warn('Failed to save mail_hide_replied', e);
+      }
+      showToast(isHideReplied ? '회신한 메일을 목록에서 숨겼습니다.' : '회신한 메일을 다시 표시합니다.', 'info');
       renderMailList(emailsList);
     });
   }
@@ -665,6 +700,10 @@ function markAllMailsAsRead() {
   });
   lucide.createIcons();
   showToast(`메일 ${emailsList.length}개를 모두 읽음 처리했습니다.`, 'success');
+
+  if (isHideRead) {
+    renderMailList(emailsList);
+  }
 }
 
 function markMailAsReplied(email) {
@@ -743,35 +782,53 @@ function renderMailList(emails) {
   const laterSet = getLaterMailKeys();
   updateLaterCountBadge();
 
+  const readSet = getReadMailKeys();
+  const repliedSet = getRepliedMailKeys();
+
   // Apply current filter (all vs later)
   let displayedEmails = emails;
   if (currentMailFilter === 'later') {
     displayedEmails = emails.filter(email => laterSet.has(getMailKey(email)));
   }
 
+  // Apply Hide Read filter
+  if (isHideRead) {
+    displayedEmails = displayedEmails.filter(email => !readSet.has(getMailKey(email)));
+  }
+
+  // Apply Hide Replied filter
+  if (isHideReplied) {
+    displayedEmails = displayedEmails.filter(email => !repliedSet.has(getMailKey(email)));
+  }
+
   if (displayedEmails.length === 0) {
+    let emptyMessage = '받은 메일함이 비어 있습니다.';
+    let emptySubMessage = '';
+    let emptyIcon = 'inbox';
+
     if (currentMailFilter === 'later') {
-      mailListContainer.innerHTML = `
-        <div class="loading-state">
-          <i data-lucide="clock" style="color: var(--text-muted)"></i>
-          <p>나중에 회신할 메일이 없습니다.</p>
-          <small style="color: var(--text-muted); font-size: 0.75rem;">메일의 시계 아이콘이나 상세 보기에서 '나중에 회신'을 체크해보세요.</small>
-        </div>
-      `;
-    } else {
-      mailListContainer.innerHTML = `
-        <div class="loading-state">
-          <i data-lucide="inbox" style="color: var(--text-muted)"></i>
-          <p>받은 메일함이 비어 있습니다.</p>
-        </div>
-      `;
+      emptyIcon = 'clock';
+      emptyMessage = '나중에 회신할 메일이 없습니다.';
+      emptySubMessage = '메일의 시계 아이콘이나 상세 보기에서 \'나중에 회신\'을 체크해보세요.';
+    } else if (isHideRead || isHideReplied) {
+      emptyIcon = 'filter';
+      emptyMessage = '조건에 일치하는 메일이 없습니다.';
+      const activeFilters = [];
+      if (isHideRead) activeFilters.push('읽은 메일 숨김');
+      if (isHideReplied) activeFilters.push('회신 메일 숨김');
+      emptySubMessage = `현재 [${activeFilters.join(', ')}] 필터가 켜져 있습니다.`;
     }
+
+    mailListContainer.innerHTML = `
+      <div class="loading-state">
+        <i data-lucide="${emptyIcon}" style="color: var(--text-muted)"></i>
+        <p>${emptyMessage}</p>
+        ${emptySubMessage ? `<small style="color: var(--text-muted); font-size: 0.75rem;">${emptySubMessage}</small>` : ''}
+      </div>
+    `;
     lucide.createIcons();
     return;
   }
-
-  const readSet = getReadMailKeys();
-  const repliedSet = getRepliedMailKeys();
 
   // Render individual email items
   displayedEmails.forEach(email => {

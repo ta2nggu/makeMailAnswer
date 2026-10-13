@@ -233,6 +233,56 @@ body {
   display: none !important;
 }
 
+/* Quick Hide Filter Chips */
+.mail-filter-options {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-top: 0.35rem;
+}
+
+.btn-filter-chip {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25rem;
+  padding: 0.22rem 0.4rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.btn-filter-chip svg {
+  width: 11px;
+  height: 11px;
+  color: var(--text-muted);
+  transition: color 0.2s;
+}
+
+.btn-filter-chip:hover {
+  background-color: #ffffff;
+  border-color: var(--border-focus);
+  color: var(--text-primary);
+}
+
+.btn-filter-chip.active {
+  background-color: rgba(99, 102, 241, 0.08);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: var(--primary-color, #6366f1);
+  font-weight: 600;
+}
+
+.btn-filter-chip.active svg {
+  color: var(--primary-color, #6366f1);
+}
+
 /* Top Sync Range Control Bar */
 .sync-bar-container {
   padding: 0.35rem 0.75rem 0.5rem;

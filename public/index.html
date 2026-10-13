@@ -59,7 +59,7 @@
         </div>
       </div>
 
-      <!-- Email Mode: Filter Tabs (All vs Later) -->
+      <!-- Email Mode: Filter Tabs (All vs Later) & Quick Hide Options -->
       <div class="mail-filter-container" id="mail-filter-container">
         <div class="mail-filter-tabs">
           <button id="btn-filter-all" class="btn-mail-filter active">
@@ -70,6 +70,16 @@
             <i data-lucide="clock"></i>
             <span>나중에 회신</span>
             <span id="badge-later-count" class="filter-count-badge hidden">0</span>
+          </button>
+        </div>
+        <div class="mail-filter-options">
+          <button type="button" id="btn-hide-read" class="btn-filter-chip" title="읽은 메일 목록에서 숨기기">
+            <i data-lucide="eye-off"></i>
+            <span>읽은 메일 숨김</span>
+          </button>
+          <button type="button" id="btn-hide-replied" class="btn-filter-chip" title="회신 완료한 메일 목록에서 숨기기">
+            <i data-lucide="check-circle-2"></i>
+            <span>회신 메일 숨김</span>
           </button>
         </div>
       </div>
