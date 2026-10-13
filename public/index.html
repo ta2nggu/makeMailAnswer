@@ -59,6 +59,21 @@
         </div>
       </div>
 
+      <!-- Email Mode: Filter Tabs (All vs Later) -->
+      <div class="mail-filter-container" id="mail-filter-container">
+        <div class="mail-filter-tabs">
+          <button id="btn-filter-all" class="btn-mail-filter active">
+            <i data-lucide="inbox"></i>
+            <span>전체</span>
+          </button>
+          <button id="btn-filter-later" class="btn-mail-filter">
+            <i data-lucide="clock"></i>
+            <span>나중에 회신</span>
+            <span id="badge-later-count" class="filter-count-badge hidden">0</span>
+          </button>
+        </div>
+      </div>
+
       <!-- Email Mode: Mail Sync & Action Bar -->
       <div class="sync-bar-container" id="mail-sync-bar-container">
         <div class="sync-range-bar">
@@ -146,10 +161,16 @@
             <div class="mail-detail-header" id="mail-detail-header">
               <div class="mail-header-top-row">
                 <h2 id="detail-subject">제목 없음</h2>
-                <button type="button" id="btn-toggle-mail-header" class="btn-toggle-header" title="헤더 상세 정보 접기/펼치기">
-                  <span id="header-toggle-text">간략히</span>
-                  <i data-lucide="chevron-up" id="header-toggle-icon"></i>
-                </button>
+                <div class="mail-header-actions">
+                  <button type="button" id="btn-toggle-mail-later" class="btn-toggle-later" title="나중에 회신하기 표시/해제">
+                    <i data-lucide="clock" id="later-toggle-icon"></i>
+                    <span id="later-toggle-text">나중에 회신</span>
+                  </button>
+                  <button type="button" id="btn-toggle-mail-header" class="btn-toggle-header" title="헤더 상세 정보 접기/펼치기">
+                    <span id="header-toggle-text">간략히</span>
+                    <i data-lucide="chevron-up" id="header-toggle-icon"></i>
+                  </button>
+                </div>
               </div>
 
               <!-- Compact summary bar (visible when collapsed or as quick glance) -->

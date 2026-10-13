@@ -166,6 +166,73 @@ body {
   height: 14px;
 }
 
+/* Email Mode: Filter Tabs (All vs Later) */
+.mail-filter-container {
+  padding: 0 0.75rem 0.4rem;
+  background-color: var(--bg-sidebar);
+}
+
+.mail-filter-tabs {
+  display: flex;
+  background-color: rgba(0, 0, 0, 0.04);
+  padding: 3px;
+  border-radius: 8px;
+  gap: 3px;
+}
+
+.btn-mail-filter {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.5rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+}
+
+.btn-mail-filter svg {
+  width: 13px;
+  height: 13px;
+}
+
+.btn-mail-filter:hover {
+  color: var(--text-primary);
+  background-color: rgba(255, 255, 255, 0.5);
+}
+
+.btn-mail-filter.active {
+  background-color: #ffffff;
+  color: var(--primary-color, #6366f1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.filter-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 10px;
+  background-color: #f59e0b;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.filter-count-badge.hidden {
+  display: none !important;
+}
+
 /* Top Sync Range Control Bar */
 .sync-bar-container {
   padding: 0.35rem 0.75rem 0.5rem;
@@ -426,6 +493,29 @@ body {
   color: #2563eb;
   background-color: rgba(37, 99, 235, 0.12);
   border: 1px solid rgba(37, 99, 235, 0.25);
+}
+
+.mail-status-later {
+  cursor: pointer;
+  transition: all 0.15s ease;
+  color: #d1d5db;
+  background: transparent;
+}
+
+.mail-status-later:hover {
+  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.12);
+  transform: scale(1.15);
+}
+
+.mail-status-later.is-later {
+  color: #d97706;
+  background-color: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+.mail-item.is-later {
+  border-left: 3px solid #f59e0b;
 }
 
 .mail-subject {
@@ -697,6 +787,52 @@ body {
   color: var(--text-primary);
   flex: 1;
   word-break: break-word;
+}
+
+.mail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.btn-toggle-later {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  padding: 0.18rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-toggle-later svg {
+  width: 12px;
+  height: 12px;
+  transition: color 0.2s ease;
+}
+
+.btn-toggle-later:hover {
+  background-color: #fffbeb;
+  color: #d97706;
+  border-color: #f59e0b;
+}
+
+.btn-toggle-later.active {
+  background-color: #fef3c7;
+  color: #b45309;
+  border-color: #f59e0b;
+  box-shadow: 0 1px 2px rgba(245, 158, 11, 0.15);
+}
+
+.btn-toggle-later.active svg {
+  color: #b45309;
 }
 
 .btn-toggle-header {

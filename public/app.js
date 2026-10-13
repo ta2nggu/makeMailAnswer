@@ -11,6 +11,7 @@ let searchQuery = '';
 let searchDebounceTimeout = null;
 let chatHistory = [];
 let isComposingNewMail = false;
+let currentMailFilter = 'all'; // 'all' or 'later'
 
 // Prompt Tuning State
 let defaultEmailPromptTemplate = '';
@@ -256,6 +257,36 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   if (btnMarkAllRead) {
     btnMarkAllRead.addEventListener('click', markAllMailsAsRead);
+  }
+
+  // Bind Mail Filter Tabs (All vs Later)
+  const btnFilterAll = document.getElementById('btn-filter-all');
+  const btnFilterLater = document.getElementById('btn-filter-later');
+  if (btnFilterAll && btnFilterLater) {
+    btnFilterAll.addEventListener('click', () => {
+      if (currentMailFilter === 'all') return;
+      currentMailFilter = 'all';
+      btnFilterAll.classList.add('active');
+      btnFilterLater.classList.remove('active');
+      renderMailList(emailsList);
+    });
+
+    btnFilterLater.addEventListener('click', () => {
+      if (currentMailFilter === 'later') return;
+      currentMailFilter = 'later';
+      btnFilterLater.classList.add('active');
+      btnFilterAll.classList.remove('active');
+      renderMailList(emailsList);
+    });
+  }
+
+  // Bind Mail Detail Later Toggle Button
+  const btnToggleLater = document.getElementById('btn-toggle-mail-later');
+  if (btnToggleLater) {
+    btnToggleLater.addEventListener('click', () => {
+      if (!selectedEmail) return;
+      toggleMailLater(selectedEmail);
+    });
   }
 
   // Auto refresh every 30 minutes (30 * 60 * 1000 ms)
@@ -512,6 +543,74 @@ function getRepliedMailKeys() {
   }
 }
 
+function getLaterMailKeys() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem('mail_later_keys') || '[]'));
+  } catch (e) {
+    return new Set();
+  }
+}
+
+function updateLaterCountBadge() {
+  const badge = document.getElementById('badge-later-count');
+  if (!badge) return;
+  const count = getLaterMailKeys().size;
+  if (count > 0) {
+    badge.textContent = count;
+    badge.classList.remove('hidden');
+  } else {
+    badge.textContent = '0';
+    badge.classList.add('hidden');
+  }
+}
+
+function toggleMailLater(email) {
+  const key = getMailKey(email);
+  if (!key) return false;
+  const laterSet = getLaterMailKeys();
+  const willBeLater = !laterSet.has(key);
+  if (willBeLater) {
+    laterSet.add(key);
+  } else {
+    laterSet.delete(key);
+  }
+  try {
+    localStorage.setItem('mail_later_keys', JSON.stringify(Array.from(laterSet)));
+  } catch (e) {
+    console.warn('Failed to save later status to localStorage', e);
+  }
+
+  updateMailItemStatusUI(key, null, null, willBeLater);
+  updateDetailLaterButtonUI(willBeLater);
+  updateLaterCountBadge();
+
+  if (currentMailFilter === 'later' && !willBeLater) {
+    // If currently viewing "Later" list and unchecked, re-render list
+    renderMailList(emailsList);
+  }
+
+  showToast(willBeLater ? '나중에 회신할 메일로 표시되었습니다.' : '나중에 회신 표시가 해제되었습니다.', 'info');
+  return willBeLater;
+}
+
+function updateDetailLaterButtonUI(isLater) {
+  const btn = document.getElementById('btn-toggle-mail-later');
+  const text = document.getElementById('later-toggle-text');
+  const icon = document.getElementById('later-toggle-icon');
+  if (!btn) return;
+
+  if (isLater) {
+    btn.classList.add('active');
+    btn.title = '나중에 회신 해제';
+    if (text) text.textContent = '나중에 회신 중';
+  } else {
+    btn.classList.remove('active');
+    btn.title = '나중에 회신하기 표시';
+    if (text) text.textContent = '나중에 회신';
+  }
+  lucide.createIcons();
+}
+
 function getMailKey(email) {
   if (!email) return '';
   return email.uniqueId || String(email.id);
@@ -529,7 +628,7 @@ function markMailAsRead(email) {
       console.warn('Failed to save read status to localStorage', e);
     }
   }
-  updateMailItemStatusUI(key, true, null);
+  updateMailItemStatusUI(key, true, null, null);
 }
 
 function markAllMailsAsRead() {
@@ -580,17 +679,17 @@ function markMailAsReplied(email) {
       console.warn('Failed to save replied status to localStorage', e);
     }
   }
-  updateMailItemStatusUI(key, null, true);
+  updateMailItemStatusUI(key, null, true, null);
 }
 
-function updateMailItemStatusUI(mailKey, isRead, isReplied) {
+function updateMailItemStatusUI(mailKey, isRead, isReplied, isLater) {
   let item = document.querySelector(`.mail-item[data-key="${mailKey}"]`);
   if (!item) {
     item = document.querySelector(`.mail-item[data-id="${mailKey}"]`);
   }
   if (!item) return;
 
-  if (isRead !== null) {
+  if (isRead !== null && isRead !== undefined) {
     if (isRead) {
       item.classList.add('read');
       item.classList.remove('unread');
@@ -603,7 +702,7 @@ function updateMailItemStatusUI(mailKey, isRead, isReplied) {
     }
   }
 
-  if (isReplied !== null) {
+  if (isReplied !== null && isReplied !== undefined) {
     if (isReplied) {
       item.classList.add('replied');
       let repliedBadge = item.querySelector('.mail-status-replied');
@@ -619,6 +718,20 @@ function updateMailItemStatusUI(mailKey, isRead, isReplied) {
       }
     }
   }
+
+  if (isLater !== null && isLater !== undefined) {
+    if (isLater) {
+      item.classList.add('is-later');
+    } else {
+      item.classList.remove('is-later');
+    }
+    const laterBadge = item.querySelector('.mail-status-later');
+    if (laterBadge) {
+      laterBadge.className = `mail-status-badge mail-status-later ${isLater ? 'is-later' : ''}`;
+      laterBadge.title = isLater ? '나중에 회신 (클릭하여 해제)' : '나중에 회신하기';
+      laterBadge.innerHTML = `<i data-lucide="${isLater ? 'clock' : 'clock'}"></i>`;
+    }
+  }
   lucide.createIcons();
 }
 
@@ -627,13 +740,32 @@ function renderMailList(emails) {
   const mailListContainer = document.getElementById('mail-list');
   mailListContainer.innerHTML = '';
 
-  if (emails.length === 0) {
-    mailListContainer.innerHTML = `
-      <div class="loading-state">
-        <i data-lucide="inbox" style="color: var(--text-muted)"></i>
-        <p>받은 메일함이 비어 있습니다.</p>
-      </div>
-    `;
+  const laterSet = getLaterMailKeys();
+  updateLaterCountBadge();
+
+  // Apply current filter (all vs later)
+  let displayedEmails = emails;
+  if (currentMailFilter === 'later') {
+    displayedEmails = emails.filter(email => laterSet.has(getMailKey(email)));
+  }
+
+  if (displayedEmails.length === 0) {
+    if (currentMailFilter === 'later') {
+      mailListContainer.innerHTML = `
+        <div class="loading-state">
+          <i data-lucide="clock" style="color: var(--text-muted)"></i>
+          <p>나중에 회신할 메일이 없습니다.</p>
+          <small style="color: var(--text-muted); font-size: 0.75rem;">메일의 시계 아이콘이나 상세 보기에서 '나중에 회신'을 체크해보세요.</small>
+        </div>
+      `;
+    } else {
+      mailListContainer.innerHTML = `
+        <div class="loading-state">
+          <i data-lucide="inbox" style="color: var(--text-muted)"></i>
+          <p>받은 메일함이 비어 있습니다.</p>
+        </div>
+      `;
+    }
     lucide.createIcons();
     return;
   }
@@ -642,13 +774,14 @@ function renderMailList(emails) {
   const repliedSet = getRepliedMailKeys();
 
   // Render individual email items
-  emails.forEach(email => {
+  displayedEmails.forEach(email => {
     const item = document.createElement('div');
     const mailKey = getMailKey(email);
     const isRead = readSet.has(mailKey);
     const isReplied = repliedSet.has(mailKey);
+    const isLater = laterSet.has(mailKey);
 
-    item.className = `mail-item ${isRead ? 'read' : 'unread'} ${isReplied ? 'replied' : ''}`;
+    item.className = `mail-item ${isRead ? 'read' : 'unread'} ${isReplied ? 'replied' : ''} ${isLater ? 'is-later' : ''}`;
     item.dataset.id = email.id;
     item.dataset.key = mailKey;
     if (selectedEmail && (selectedEmail.id === email.id || (selectedEmail.uniqueId && selectedEmail.uniqueId === email.uniqueId))) {
@@ -664,6 +797,9 @@ function renderMailList(emails) {
         <div class="mail-header-right">
           <span class="mail-date">${displayDate}</span>
           <div class="mail-status-badges">
+            <span class="mail-status-badge mail-status-later ${isLater ? 'is-later' : ''}" title="${isLater ? '나중에 회신 (클릭하여 해제)' : '나중에 회신하기 체크'}">
+              <i data-lucide="clock"></i>
+            </span>
             ${isReplied ? `<span class="mail-status-badge mail-status-replied is-replied" title="회신 완료"><i data-lucide="corner-up-left"></i></span>` : ''}
             <span class="mail-status-badge mail-status-read ${isRead ? 'is-read' : 'is-unread'}" title="${isRead ? '읽음' : '읽지 않음'}">
               <i data-lucide="${isRead ? 'mail-open' : 'mail'}"></i>
@@ -673,6 +809,15 @@ function renderMailList(emails) {
       </div>
       <div class="mail-subject" title="${email.subject}">${email.subject}</div>
     `;
+
+    // Later toggle button on item
+    const laterBadge = item.querySelector('.mail-status-later');
+    if (laterBadge) {
+      laterBadge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleMailLater(email);
+      });
+    }
 
     item.addEventListener('click', () => {
       markMailAsRead(email);
@@ -1036,6 +1181,10 @@ async function selectEmail(id) {
 
     // Update compact summary row with sender and badges
     updateHeaderSummaryBar(data);
+
+    // Update Later Button in mail detail header
+    const laterSet = getLaterMailKeys();
+    updateDetailLaterButtonUI(laterSet.has(getMailKey(data)));
 
     // Show body
     const mailDetailBodyEl = document.querySelector('.mail-detail-body');
