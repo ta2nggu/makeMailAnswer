@@ -73,6 +73,38 @@ body {
   border-bottom: 1px solid var(--border-color);
 }
 
+.sidebar-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.btn-icon {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.btn-icon:hover {
+  background-color: var(--bg-surface, #ffffff);
+  border-color: var(--border-color);
+  color: var(--primary-color, #6366f1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.btn-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
 .logo {
   display: flex;
   align-items: center;
@@ -1006,6 +1038,55 @@ body {
   color: var(--text-secondary);
   flex: 1;
   word-break: break-all;
+}
+
+/* Clickable Copyable Email Address Tags */
+.email-copy-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.1rem 0.35rem;
+  margin: 1px 2px 1px 0;
+  border-radius: 4px;
+  background-color: rgba(99, 102, 241, 0.05);
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  color: #334155;
+  font-size: 0.76rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: text;
+}
+
+.email-copy-tag:hover {
+  background-color: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.35);
+  color: var(--primary-color, #4f46e5);
+  transform: translateY(-1px);
+}
+
+.email-copy-tag:active {
+  transform: translateY(0);
+}
+
+.email-copy-tag .email-copy-icon {
+  width: 10px;
+  height: 10px;
+  color: var(--text-muted);
+  transition: color 0.15s;
+}
+
+.email-copy-tag:hover .email-copy-icon {
+  color: var(--primary-color, #4f46e5);
+}
+
+.summary-sender.copyable {
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.summary-sender.copyable:hover {
+  color: var(--primary-color, #4f46e5);
+  text-decoration: underline;
 }
 
 /* Scrollable Meta Values when too many recipients or CCs */
@@ -2547,6 +2628,321 @@ textarea:focus {
 .attachment-chip-remove svg {
   width: 11px;
   height: 11px;
+}
+
+/* -----------------------------------------------------------------------------
+   Address Book Modal Styles
+----------------------------------------------------------------------------- */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-card.address-book-modal {
+  background-color: #ffffff;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+  animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-color);
+  background-color: #f8fafc;
+}
+
+.modal-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-title svg {
+  width: 18px;
+  height: 18px;
+  color: var(--primary-color, #6366f1);
+}
+
+.modal-btn-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.modal-btn-close:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+  color: var(--text-primary);
+}
+
+.modal-btn-close svg {
+  width: 18px;
+  height: 18px;
+}
+
+.address-book-body {
+  padding: 1.1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Contact add form */
+.contact-form {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+  background-color: #f8fafc;
+  padding: 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+}
+
+.contact-form-inputs {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.contact-input {
+  width: 100%;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.contact-input:focus {
+  border-color: var(--primary-color, #6366f1);
+}
+
+.btn-add-contact {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  color: #ffffff;
+  border: none;
+  padding: 0 0.9rem;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+
+.btn-add-contact:hover {
+  opacity: 0.92;
+  transform: translateY(-1px);
+}
+
+.btn-add-contact svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Contact search row */
+.contact-search-row {
+  display: flex;
+  align-items: center;
+}
+
+.contact-search-box {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.65rem;
+  background-color: #ffffff;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.contact-search-box svg {
+  width: 14px;
+  height: 14px;
+  color: var(--text-muted);
+}
+
+.contact-search-box input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 0.78rem;
+  color: var(--text-primary);
+}
+
+/* Contacts list */
+.contact-list-container {
+  flex: 1;
+  min-height: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background-color: #ffffff;
+}
+
+.contacts-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.contact-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.55rem 0.75rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.contact-item:last-child {
+  border-bottom: none;
+}
+
+.contact-item:hover {
+  background-color: rgba(99, 102, 241, 0.05);
+}
+
+.contact-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.contact-alias {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.contact-email {
+  font-size: 0.74rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+}
+
+.contact-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.btn-contact-action {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.btn-contact-action:hover {
+  color: var(--primary-color, #6366f1);
+  background-color: rgba(99, 102, 241, 0.1);
+}
+
+.btn-contact-action.delete:hover {
+  color: var(--accent-danger);
+  background-color: rgba(239, 68, 68, 0.1);
+}
+
+.btn-contact-action svg {
+  width: 14px;
+  height: 14px;
+}
+
+.contacts-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2.5rem 1rem;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  gap: 0.4rem;
+}
+
+.contacts-empty svg {
+  width: 28px;
+  height: 28px;
+  opacity: 0.5;
+}
+
+.modal-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border-color);
+  background-color: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-footer-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
 }
 
 

@@ -51,6 +51,232 @@ function parseEmailList(str) {
   return results;
 }
 
+// Copy text to clipboard and show toast
+function copyToClipboard(text, label = '이메일 주소') {
+  if (!text) return;
+  navigator.clipboard.writeText(text)
+    .then(() => {
+      showToast(`${label}를 복사했습니다: ${text}`, 'success');
+    })
+    .catch(err => {
+      console.error(err);
+      // Fallback for older browsers or insecure contexts
+      try {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = text;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        showToast(`${label}를 복사했습니다: ${text}`, 'success');
+      } catch (e) {
+        showToast('클립보드 복사에 실패했습니다.', 'error');
+      }
+    });
+}
+
+// Render parsed email list into clickable tags inside target container
+function renderEmailAddressTags(containerEl, addressString) {
+  if (!containerEl) return;
+  containerEl.innerHTML = '';
+  if (!addressString || !addressString.trim()) return;
+
+  const parsed = parseEmailList(addressString);
+  if (parsed.length === 0) {
+    // If regex didn't extract any structured email, just display text with click-to-copy
+    const tag = document.createElement('span');
+    tag.className = 'email-copy-tag';
+    tag.title = '클릭하여 복사';
+    tag.textContent = addressString;
+    tag.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyToClipboard(addressString, '주소');
+    });
+    containerEl.appendChild(tag);
+    return;
+  }
+
+  parsed.forEach(item => {
+    const tag = document.createElement('span');
+    tag.className = 'email-copy-tag';
+    tag.title = `${item.email} (클릭하여 복사)`;
+
+    const displayText = item.name ? `${item.name} <${item.email}>` : item.email;
+    tag.innerHTML = `
+      <span>${displayText}</span>
+      <i data-lucide="copy" class="email-copy-icon"></i>
+    `;
+
+    tag.addEventListener('click', (e) => {
+      e.stopPropagation();
+      copyToClipboard(item.email, item.name || '이메일 주소');
+    });
+
+    containerEl.appendChild(tag);
+  });
+
+  lucide.createIcons();
+}
+
+// -----------------------------------------------------------------------------
+// Address Book (간편 주소록) LocalStorage Management & Modal
+// -----------------------------------------------------------------------------
+function getAddressBookContacts() {
+  try {
+    const data = localStorage.getItem('address_book_contacts');
+    if (data) {
+      return JSON.parse(data);
+    }
+  } catch (e) {
+    console.warn('Failed to load address book', e);
+  }
+  // Default contacts if empty
+  const defaultContacts = [
+    { id: '1', alias: '김태영 (본인)', email: 'taeyoung@ilogen.com' }
+  ];
+  try {
+    localStorage.setItem('address_book_contacts', JSON.stringify(defaultContacts));
+  } catch (e) {}
+  return defaultContacts;
+}
+
+function saveAddressBookContacts(contacts) {
+  try {
+    localStorage.setItem('address_book_contacts', JSON.stringify(contacts));
+  } catch (e) {
+    console.warn('Failed to save address book', e);
+  }
+}
+
+function addContactToAddressBook(alias, email) {
+  const contacts = getAddressBookContacts();
+  const trimmedAlias = alias.trim();
+  const trimmedEmail = email.trim();
+
+  // Check duplicate email
+  const existing = contacts.find(c => c.email.toLowerCase() === trimmedEmail.toLowerCase());
+  if (existing) {
+    existing.alias = trimmedAlias; // Update alias
+    saveAddressBookContacts(contacts);
+    renderAddressBookList();
+    showToast(`'${trimmedAlias}' 주소록 정보가 갱신되었습니다.`, 'success');
+    return;
+  }
+
+  const newContact = {
+    id: Date.now().toString(),
+    alias: trimmedAlias,
+    email: trimmedEmail
+  };
+  contacts.unshift(newContact);
+  saveAddressBookContacts(contacts);
+  renderAddressBookList();
+  showToast(`'${trimmedAlias}' 님이 간편 주소록에 추가되었습니다.`, 'success');
+}
+
+function deleteContactFromAddressBook(contactId) {
+  let contacts = getAddressBookContacts();
+  const target = contacts.find(c => c.id === contactId);
+  contacts = contacts.filter(c => c.id !== contactId);
+  saveAddressBookContacts(contacts);
+  renderAddressBookList();
+  if (target) {
+    showToast(`'${target.alias}' 님이 주소록에서 삭제되었습니다.`, 'info');
+  }
+}
+
+function renderAddressBookList(filterKeyword = '') {
+  const container = document.getElementById('contacts-list');
+  if (!container) return;
+  container.innerHTML = '';
+
+  const contacts = getAddressBookContacts();
+  const kw = filterKeyword.toLowerCase().trim();
+
+  const filtered = contacts.filter(c => {
+    if (!kw) return true;
+    return c.alias.toLowerCase().includes(kw) || c.email.toLowerCase().includes(kw);
+  });
+
+  if (filtered.length === 0) {
+    container.innerHTML = `
+      <div class="contacts-empty">
+        <i data-lucide="users"></i>
+        <span>${kw ? '검색된 연락처가 없습니다.' : '등록된 주소록이 비어 있습니다.'}</span>
+      </div>
+    `;
+    lucide.createIcons();
+    return;
+  }
+
+  filtered.forEach(contact => {
+    const item = document.createElement('div');
+    item.className = 'contact-item';
+    item.title = `${contact.email} (클릭하여 복사)`;
+
+    item.innerHTML = `
+      <div class="contact-info">
+        <span class="contact-alias">${contact.alias}</span>
+        <span class="contact-email">${contact.email}</span>
+      </div>
+      <div class="contact-actions">
+        <button type="button" class="btn-contact-action copy" title="이메일 복사">
+          <i data-lucide="copy"></i>
+        </button>
+        <button type="button" class="btn-contact-action delete" title="연락처 삭제">
+          <i data-lucide="trash-2"></i>
+        </button>
+      </div>
+    `;
+
+    // Click item or copy button -> copy to clipboard
+    item.addEventListener('click', () => {
+      copyToClipboard(contact.email, contact.alias);
+    });
+
+    const copyBtn = item.querySelector('.btn-contact-action.copy');
+    if (copyBtn) {
+      copyBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        copyToClipboard(contact.email, contact.alias);
+      });
+    }
+
+    const delBtn = item.querySelector('.btn-contact-action.delete');
+    if (delBtn) {
+      delBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (confirm(`'${contact.alias}' 연락처를 삭제하시겠습니까?`)) {
+          deleteContactFromAddressBook(contact.id);
+        }
+      });
+    }
+
+    container.appendChild(item);
+  });
+
+  lucide.createIcons();
+}
+
+function openAddressBookModal() {
+  const modal = document.getElementById('modal-address-book');
+  const searchInput = document.getElementById('input-search-contacts');
+  if (searchInput) searchInput.value = '';
+  renderAddressBookList();
+  if (modal) {
+    modal.classList.remove('hidden');
+    const firstInput = document.getElementById('input-contact-alias');
+    if (firstInput) {
+      setTimeout(() => firstInput.focus(), 50);
+    }
+  }
+}
+
+function closeAddressBookModal() {
+  const modal = document.getElementById('modal-address-book');
+  if (modal) modal.classList.add('hidden');
+}
+
 // Initialize Icons & Apps
 document.addEventListener('DOMContentLoaded', () => {
   lucide.createIcons();
@@ -342,6 +568,54 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Initialize Clipboard Image Pasting and File Attachments
   initAttachmentAndPasteHandlers();
+
+  // Bind Address Book (간편 주소록) Events
+  const btnAddressBook = document.getElementById('btn-address-book');
+  const btnCloseAddressBook = document.getElementById('btn-close-address-book');
+  const modalAddressBook = document.getElementById('modal-address-book');
+  const formAddContact = document.getElementById('form-add-contact');
+  const inputSearchContacts = document.getElementById('input-search-contacts');
+
+  if (btnAddressBook) {
+    btnAddressBook.addEventListener('click', openAddressBookModal);
+  }
+
+  if (btnCloseAddressBook) {
+    btnCloseAddressBook.addEventListener('click', closeAddressBookModal);
+  }
+
+  if (modalAddressBook) {
+    modalAddressBook.addEventListener('click', (e) => {
+      // Close when clicking backdrop
+      if (e.target === modalAddressBook) {
+        closeAddressBookModal();
+      }
+    });
+  }
+
+  if (formAddContact) {
+    formAddContact.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const aliasInput = document.getElementById('input-contact-alias');
+      const emailInput = document.getElementById('input-contact-email');
+      if (aliasInput && emailInput) {
+        const alias = aliasInput.value.trim();
+        const email = emailInput.value.trim();
+        if (alias && email) {
+          addContactToAddressBook(alias, email);
+          aliasInput.value = '';
+          emailInput.value = '';
+          aliasInput.focus();
+        }
+      }
+    });
+  }
+
+  if (inputSearchContacts) {
+    inputSearchContacts.addEventListener('input', (e) => {
+      renderAddressBookList(e.target.value);
+    });
+  }
 });
 
 // Resizable Split Pane Logic
@@ -983,7 +1257,13 @@ function updateHeaderSummaryBar(emailData) {
   if (!summarySender || !summaryBadges) return;
 
   summarySender.textContent = emailData.from || '';
-  summarySender.title = emailData.from || '';
+  summarySender.title = `${emailData.from || ''} (클릭하여 이메일 주소 복사)`;
+  summarySender.classList.add('copyable');
+  summarySender.onclick = (e) => {
+    e.stopPropagation();
+    const emailOnly = extractEmailAddress(emailData.from) || emailData.from;
+    copyToClipboard(emailOnly, '보낸사람 이메일');
+  };
 
   summaryBadges.innerHTML = '';
 
@@ -1192,18 +1472,18 @@ async function selectEmail(id) {
 
     // Set header info
     document.getElementById('detail-subject').textContent = data.subject || '(제목 없음)';
-    document.getElementById('detail-from').textContent = data.from || '';
-    document.getElementById('detail-to').textContent = data.to || '';
+    renderEmailAddressTags(document.getElementById('detail-from'), data.from || '');
+    renderEmailAddressTags(document.getElementById('detail-to'), data.to || '');
 
     // Render CC header if exists
     const ccRow = document.getElementById('detail-cc-row');
     const ccSpan = document.getElementById('detail-cc');
     if (ccRow && ccSpan) {
       if (data.cc && data.cc.trim()) {
-        ccSpan.textContent = data.cc;
+        renderEmailAddressTags(ccSpan, data.cc);
         ccRow.classList.remove('hidden');
       } else {
-        ccSpan.textContent = '';
+        ccSpan.innerHTML = '';
         ccRow.classList.add('hidden');
       }
     }

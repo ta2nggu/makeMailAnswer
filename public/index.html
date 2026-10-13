@@ -23,9 +23,14 @@
           <i data-lucide="sparkles" class="logo-icon"></i>
           <span>AI Workspace</span>
         </div>
-        <button id="btn-refresh" class="btn-icon" title="메일 새로고침">
-          <i data-lucide="rotate-cw" id="refresh-icon"></i>
-        </button>
+        <div class="sidebar-header-actions">
+          <button id="btn-address-book" class="btn-icon" title="간편 주소록 열기">
+            <i data-lucide="contact-2"></i>
+          </button>
+          <button id="btn-refresh" class="btn-icon" title="메일 새로고침">
+            <i data-lucide="rotate-cw" id="refresh-icon"></i>
+          </button>
+        </div>
       </div>
 
       <!-- Mode Selector Tabs -->
@@ -660,6 +665,55 @@
       </div>
     </main>
 
+  </div>
+
+  <!-- Address Book (간편 주소록) Modal -->
+  <div id="modal-address-book" class="modal-backdrop hidden">
+    <div class="modal-card address-book-modal">
+      <div class="modal-header">
+        <div class="modal-title">
+          <i data-lucide="contact-2"></i>
+          <span>간편 주소록</span>
+        </div>
+        <button type="button" id="btn-close-address-book" class="modal-btn-close" title="닫기">
+          <i data-lucide="x"></i>
+        </button>
+      </div>
+
+      <div class="address-book-body">
+        <!-- New contact input form -->
+        <form id="form-add-contact" class="contact-form">
+          <div class="contact-form-inputs">
+            <input type="text" id="input-contact-alias" class="contact-input" placeholder="별칭/이름/메모 (예: 홍길동 책임)" required>
+            <input type="email" id="input-contact-email" class="contact-input email" placeholder="이메일 주소 (예: gildong@ilogen.com)" required>
+          </div>
+          <button type="submit" id="btn-submit-contact" class="btn-add-contact">
+            <i data-lucide="user-plus"></i> 추가
+          </button>
+        </form>
+
+        <!-- Search contacts box -->
+        <div class="contact-search-row">
+          <div class="contact-search-box">
+            <i data-lucide="search"></i>
+            <input type="text" id="input-search-contacts" placeholder="이름, 별칭, 이메일 주소 검색...">
+          </div>
+        </div>
+
+        <!-- Contacts list -->
+        <div class="contact-list-container">
+          <div id="contacts-list" class="contacts-list">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="modal-footer-hint">
+          💡 주소록 항목을 클릭하면 이메일 주소가 클립보드에 바로 복사됩니다.
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Toast Notification System -->
