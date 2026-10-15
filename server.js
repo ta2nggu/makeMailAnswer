@@ -15,8 +15,14 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 // API: Serve signature banner image
 app.get('/api/signature-banner', (req, res) => {
-  const bannerPath = 'C:\\Users\\kty\\Pictures\\hotbanner.jpg';
-  if (fs.existsSync(bannerPath)) {
+  const candidatePaths = [
+    path.join(__dirname, 'hotbanner.jpg'),
+    path.join(__dirname, 'public', 'hotbanner.jpg'),
+    path.join(process.env.USERPROFILE || '', 'Pictures', 'hotbanner.jpg'),
+    'C:\\Users\\kty\\Pictures\\hotbanner.jpg'
+  ];
+  const bannerPath = candidatePaths.find(p => p && fs.existsSync(p));
+  if (bannerPath) {
     res.sendFile(bannerPath);
   } else {
     res.status(404).send('Banner not found');
@@ -270,13 +276,24 @@ app.get('/api/emails', async (req, res) => {
   const limit = parseInt(req.query.limit || '10', 10);
   const search = (req.query.search || '').trim().toLowerCase();
   const forceRefresh = req.query.forceRefresh === 'true';
+  const laterKeysParam = (req.query.laterKeys || '').trim();
 
   try {
     const allEmails = await syncMailbox(forceRefresh);
 
     let filteredEmails = allEmails;
+
+    // Filter by laterKeys if requested
+    if (laterKeysParam) {
+      const laterKeySet = new Set(laterKeysParam.split(',').map(k => k.trim()).filter(Boolean));
+      filteredEmails = filteredEmails.filter(email => {
+        const key = email.uniqueId || String(email.id);
+        return laterKeySet.has(key) || laterKeySet.has(String(email.id)) || laterKeySet.has(email.uniqueId);
+      });
+    }
+
     if (search) {
-      filteredEmails = allEmails.filter(email => 
+      filteredEmails = filteredEmails.filter(email => 
         (email.subject && email.subject.toLowerCase().includes(search)) || 
         (email.from && email.from.toLowerCase().includes(search))
       );
@@ -860,10 +877,15 @@ const handleSendEmail = async (req, res) => {
     const mailAttachments = [];
 
     // 1. Signature banner inline attachment
-    const bannerPath = 'C:\\Users\\kty\\Pictures\\hotbanner.jpg';
-    const bannerExists = fs.existsSync(bannerPath);
+    const candidateBannerPaths = [
+      path.join(__dirname, 'hotbanner.jpg'),
+      path.join(__dirname, 'public', 'hotbanner.jpg'),
+      path.join(process.env.USERPROFILE || '', 'Pictures', 'hotbanner.jpg'),
+      'C:\\Users\\kty\\Pictures\\hotbanner.jpg'
+    ];
+    const bannerPath = candidateBannerPaths.find(p => p && fs.existsSync(p));
     let bannerHtml = '';
-    if (bannerExists) {
+    if (bannerPath) {
       mailAttachments.push({
         filename: 'hotbanner.jpg',
         path: bannerPath,
@@ -871,7 +893,7 @@ const handleSendEmail = async (req, res) => {
       });
       bannerHtml = `
         <div style="margin-top: 20px; margin-bottom: 20px;">
-          <a href="https://bit.ly/ilogenemail" target="_blank" rel="noopener noreferrer">
+          <a href="https://player.clickmate.kr/seller/1681027" target="_blank" rel="noopener noreferrer">
             <img src="cid:signature-hotbanner" alt="Logen Banner" style="max-width: 100%; border: 0; display: block;" />
           </a>
         </div>

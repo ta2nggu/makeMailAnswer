@@ -496,7 +496,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentMailFilter = 'all';
       btnFilterAll.classList.add('active');
       btnFilterLater.classList.remove('active');
-      renderMailList(emailsList);
+      fetchEmails(false);
     });
 
     btnFilterLater.addEventListener('click', () => {
@@ -504,7 +504,7 @@ document.addEventListener('DOMContentLoaded', () => {
       currentMailFilter = 'later';
       btnFilterLater.classList.add('active');
       btnFilterAll.classList.remove('active');
-      renderMailList(emailsList);
+      fetchEmails(false);
     });
   }
 
@@ -554,9 +554,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
   setInterval(() => {
     const refreshBtn = document.getElementById('btn-refresh');
-    if (refreshBtn && !refreshBtn.disabled) {
-      console.log('[Auto-Refresh] 30분 주기 메일 자동 새로고침 실행');
-      refreshBtn.click();
+    if (refreshBtn && !refreshBtn.disabled && !isLoadingMore) {
+      console.log('[Auto-Refresh] 30분 주기 메일 백그라운드 자동 갱신 실행 (스크롤 유지)');
+      fetchEmails(false, false, { silent: true });
     }
   }, AUTO_REFRESH_INTERVAL_MS);
 
@@ -684,11 +684,16 @@ function showToast(message, type = 'info') {
   }, 4000);
 }
 
-// Fetch Email List (with Pagination support)
-async function fetchEmails(append = false, forceRefresh = false) {
+// Fetch Email List (with Pagination support, silent refresh, and filter support)
+async function fetchEmails(append = false, forceRefresh = false, options = {}) {
   const refreshBtn = document.getElementById('btn-refresh');
   const refreshIcon = document.getElementById('refresh-icon');
   const mailListContainer = document.getElementById('mail-list');
+  const sidebarContent = document.getElementById('mail-sidebar-content');
+  const isSilent = options.silent === true;
+
+  // Preserve scroll position if refreshing silently
+  const savedScrollTop = sidebarContent ? sidebarContent.scrollTop : 0;
 
   if (append) {
     isLoadingMore = true;
@@ -698,22 +703,43 @@ async function fetchEmails(append = false, forceRefresh = false) {
       loadMoreBtn.innerHTML = `<div class="spinner" style="width:14px; height:14px; border-width:2px;"></div> 불러오는 중...`;
     }
   } else {
-    // Reset paging state on manual refresh or welcome reload
-    currentPage = 1;
-    emailsList = [];
-    if (refreshBtn) refreshBtn.disabled = true;
+    // If not appending and not silent, reset page and show loading state
+    if (!isSilent) {
+      currentPage = 1;
+      emailsList = [];
+      if (refreshBtn) refreshBtn.disabled = true;
 
-    const loadingMessage = searchQuery ? '메일을 검색하는 중...' : 'KT Biz Office 사서함을 읽는 중...';
-    mailListContainer.innerHTML = `
-      <div class="loading-state">
-        <div class="spinner"></div>
-        <p>${loadingMessage}</p>
-      </div>
-    `;
+      const loadingMessage = searchQuery ? '메일을 검색하는 중...' : 'KT Biz Office 사서함을 읽는 중...';
+      mailListContainer.innerHTML = `
+        <div class="loading-state">
+          <div class="spinner"></div>
+          <p>${loadingMessage}</p>
+        </div>
+      `;
+    }
   }
 
   try {
-    let url = `/api/emails?page=${currentPage}&limit=${limitPerPage}`;
+    // When in "later" tab, fetch matching emails using laterKeys
+    let url = '';
+    if (currentMailFilter === 'later') {
+      const laterKeysArr = Array.from(getLaterMailKeys());
+      if (laterKeysArr.length === 0) {
+        emailsList = [];
+        totalMailCount = 0;
+        updateTopSyncBar();
+        renderMailList(emailsList);
+        return;
+      }
+      const fetchLimit = Math.max(laterKeysArr.length, limitPerPage * currentPage);
+      url = `/api/emails?page=1&limit=${fetchLimit}&laterKeys=${encodeURIComponent(laterKeysArr.join(','))}`;
+    } else {
+      // If silent refresh, fetch all pages loaded so far to maintain list view
+      const effectiveLimit = isSilent ? (currentPage * limitPerPage) : limitPerPage;
+      const targetPage = isSilent ? 1 : currentPage;
+      url = `/api/emails?page=${targetPage}&limit=${effectiveLimit}`;
+    }
+
     if (searchQuery) {
       url += `&search=${encodeURIComponent(searchQuery)}`;
     }
@@ -746,10 +772,15 @@ async function fetchEmails(append = false, forceRefresh = false) {
     
     // Refresh icons inside rendered content
     lucide.createIcons();
+
+    // Restore scroll position on silent refresh
+    if (isSilent && sidebarContent) {
+      sidebarContent.scrollTop = savedScrollTop;
+    }
     
     if (append) {
       showToast(`이전 메일 ${newEmails.length}개를 추가로 불러왔습니다.`, 'success');
-    } else {
+    } else if (!isSilent) {
       if (searchQuery) {
         showToast(`검색 조건에 맞는 메일을 ${totalMailCount}개 찾았습니다.`, 'success');
       } else {
@@ -758,16 +789,18 @@ async function fetchEmails(append = false, forceRefresh = false) {
     }
   } catch (error) {
     console.error(error);
-    showToast(error.message, 'error');
-    if (!append) {
-      mailListContainer.innerHTML = `
-        <div class="loading-state">
-          <i data-lucide="alert-circle" style="color: var(--accent-danger)"></i>
-          <p style="margin-top: 0.5rem">불러오기 실패</p>
-          <small style="color: var(--text-muted); text-align: center; max-width: 200px;">${error.message}</small>
-        </div>
-      `;
-      lucide.createIcons();
+    if (!isSilent) {
+      showToast(error.message, 'error');
+      if (!append) {
+        mailListContainer.innerHTML = `
+          <div class="loading-state">
+            <i data-lucide="alert-circle" style="color: var(--accent-danger)"></i>
+            <p style="margin-top: 0.5rem">불러오기 실패</p>
+            <small style="color: var(--text-muted); text-align: center; max-width: 200px;">${error.message}</small>
+          </div>
+        `;
+        lucide.createIcons();
+      }
     }
   } finally {
     isLoadingMore = false;
