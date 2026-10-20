@@ -14,6 +14,7 @@ let isComposingNewMail = false;
 let currentMailFilter = 'inbox'; // 'inbox' | 'sent' | 'later' | 'all'
 let isHideRead = localStorage.getItem('mail_hide_read') === 'true';
 let isHideReplied = localStorage.getItem('mail_hide_replied') === 'true';
+let isHideSystemNotice = localStorage.getItem('mail_hide_system_notice') !== 'false'; // 기본값 true(숨김 권장) 또는 사용자 설정 유지
 
 // Prompt Tuning State
 let defaultEmailPromptTemplate = '';
@@ -542,6 +543,22 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('Failed to save mail_hide_replied', e);
       }
       showToast(isHideReplied ? '회신한 메일을 목록에서 숨겼습니다.' : '회신한 메일을 다시 표시합니다.', 'info');
+      renderMailList(emailsList);
+    });
+  }
+
+  const btnHideSystemNotice = document.getElementById('btn-hide-system-notice');
+  if (btnHideSystemNotice) {
+    if (isHideSystemNotice) btnHideSystemNotice.classList.add('active');
+    btnHideSystemNotice.addEventListener('click', () => {
+      isHideSystemNotice = !isHideSystemNotice;
+      btnHideSystemNotice.classList.toggle('active', isHideSystemNotice);
+      try {
+        localStorage.setItem('mail_hide_system_notice', isHideSystemNotice ? 'true' : 'false');
+      } catch (e) {
+        console.warn('Failed to save mail_hide_system_notice', e);
+      }
+      showToast(isHideSystemNotice ? '상태처리 자동 알림 메일을 숨겼습니다.' : '상태처리 자동 알림 메일을 다시 표시합니다.', 'info');
       renderMailList(emailsList);
     });
   }
@@ -1165,6 +1182,14 @@ function renderMailList(emails) {
     displayedEmails = displayedEmails.filter(email => !repliedSet.has(getMailKey(email)));
   }
 
+  // Apply Hide System Notice filter ([수신문서완료], [문서완료] 등 그룹웨어 자동 상태 메일)
+  if (isHideSystemNotice) {
+    displayedEmails = displayedEmails.filter(email => {
+      const subj = (email.subject || '').trim();
+      return !subj.startsWith('[수신문서완료]') && !subj.startsWith('[문서완료]');
+    });
+  }
+
   if (displayedEmails.length === 0) {
     let emptyMessage = '받은 메일함이 비어 있습니다.';
     let emptySubMessage = '';
@@ -1184,12 +1209,13 @@ function renderMailList(emails) {
       emptyIcon = 'clock';
       emptyMessage = '나중에 회신할 메일이 없습니다.';
       emptySubMessage = '메일의 시계 아이콘이나 상세 보기에서 \'나중에 회신\'을 체크해보세요.';
-    } else if (isHideRead || isHideReplied) {
+    } else if (isHideRead || isHideReplied || isHideSystemNotice) {
       emptyIcon = 'filter';
       emptyMessage = '조건에 일치하는 메일이 없습니다.';
       const activeFilters = [];
       if (isHideRead) activeFilters.push('읽은 메일 숨김');
       if (isHideReplied) activeFilters.push('회신 메일 숨김');
+      if (isHideSystemNotice) activeFilters.push('상태 메일 숨김');
       emptySubMessage = `현재 [${activeFilters.join(', ')}] 필터가 켜져 있습니다.`;
     }
 
