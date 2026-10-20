@@ -11,7 +11,7 @@ let searchQuery = '';
 let searchDebounceTimeout = null;
 let chatHistory = [];
 let isComposingNewMail = false;
-let currentMailFilter = 'all'; // 'all' or 'later'
+let currentMailFilter = 'inbox'; // 'inbox' | 'sent' | 'later' | 'all'
 let isHideRead = localStorage.getItem('mail_hide_read') === 'true';
 let isHideReplied = localStorage.getItem('mail_hide_replied') === 'true';
 
@@ -487,26 +487,31 @@ document.addEventListener('DOMContentLoaded', () => {
     btnMarkAllRead.addEventListener('click', markAllMailsAsRead);
   }
 
-  // Bind Mail Filter Tabs (All vs Later)
-  const btnFilterAll = document.getElementById('btn-filter-all');
+  // Bind Mail Filter Tabs (Inbox, Sent, Later, All)
+  const btnFilterInbox = document.getElementById('btn-filter-inbox');
+  const btnFilterSent = document.getElementById('btn-filter-sent');
   const btnFilterLater = document.getElementById('btn-filter-later');
-  if (btnFilterAll && btnFilterLater) {
-    btnFilterAll.addEventListener('click', () => {
-      if (currentMailFilter === 'all') return;
-      currentMailFilter = 'all';
-      btnFilterAll.classList.add('active');
-      btnFilterLater.classList.remove('active');
-      fetchEmails(false);
-    });
+  const btnFilterAll = document.getElementById('btn-filter-all');
 
-    btnFilterLater.addEventListener('click', () => {
-      if (currentMailFilter === 'later') return;
-      currentMailFilter = 'later';
-      btnFilterLater.classList.add('active');
-      btnFilterAll.classList.remove('active');
-      fetchEmails(false);
-    });
-  }
+  const filterButtons = [
+    { el: btnFilterInbox, key: 'inbox' },
+    { el: btnFilterSent, key: 'sent' },
+    { el: btnFilterLater, key: 'later' },
+    { el: btnFilterAll, key: 'all' }
+  ];
+
+  filterButtons.forEach(({ el, key }) => {
+    if (el) {
+      el.addEventListener('click', () => {
+        if (currentMailFilter === key) return;
+        currentMailFilter = key;
+        filterButtons.forEach(b => {
+          if (b.el) b.el.classList.toggle('active', b.key === key);
+        });
+        fetchEmails(false);
+      });
+    }
+  });
 
   // Bind Quick Hide Filters (Hide Read & Hide Replied)
   const btnHideRead = document.getElementById('btn-hide-read');
@@ -783,12 +788,13 @@ async function fetchEmails(append = false, forceRefresh = false, options = {}) {
         return;
       }
       const fetchLimit = Math.max(laterKeysArr.length, limitPerPage * currentPage);
-      url = `/api/emails?page=1&limit=${fetchLimit}&laterKeys=${encodeURIComponent(laterKeysArr.join(','))}`;
+      url = `/api/emails?page=1&limit=${fetchLimit}&laterKeys=${encodeURIComponent(laterKeysArr.join(','))}&folder=all`;
     } else {
       // If silent refresh, fetch all pages loaded so far to maintain list view
       const effectiveLimit = isSilent ? (currentPage * limitPerPage) : limitPerPage;
       const targetPage = isSilent ? 1 : currentPage;
-      url = `/api/emails?page=${targetPage}&limit=${effectiveLimit}`;
+      const folderParam = (currentMailFilter === 'sent') ? 'sent' : (currentMailFilter === 'all' ? 'all' : 'inbox');
+      url = `/api/emails?page=${targetPage}&limit=${effectiveLimit}&folder=${folderParam}`;
     }
 
     if (searchQuery) {
@@ -1170,6 +1176,10 @@ function renderMailList(emails) {
       if (currentMaxCacheSize < serverTotalCount) {
         emptySubMessage = `현재 최근 ${currentMaxCacheSize}개 메일 내에서 검색되었습니다.`;
       }
+    } else if (currentMailFilter === 'sent') {
+      emptyIcon = 'send';
+      emptyMessage = '보낸 메일이 없습니다.';
+      emptySubMessage = '앱에서 발송한 메일이나 내가 보낸 메일이 여기에 표시됩니다.';
     } else if (currentMailFilter === 'later') {
       emptyIcon = 'clock';
       emptyMessage = '나중에 회신할 메일이 없습니다.';

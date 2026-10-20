@@ -88,6 +88,42 @@ function saveMailToArchive(rawEmail, uid, dateObj, subject) {
   }
 }
 
+// Helper: Save sent email as .eml file in mail_archive/sent
+function saveSentMailToArchive({ from, to, cc, subject, body, html }) {
+  try {
+    const sentDir = path.join(ARCHIVE_DIR, 'sent');
+    const now = new Date();
+    const yearMonth = String(now.getFullYear()) + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    const targetDir = path.join(sentDir, yearMonth);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+    const dateStr = String(now.getFullYear()) + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '_' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0');
+    const cleanSubject = sanitizeFileName(subject || '제목없음');
+    const safeRand = Math.random().toString(36).substring(2, 8);
+    const fileName = dateStr + '_[보낸메일]_' + cleanSubject + '_' + safeRand + '.eml';
+    const fullPath = path.join(targetDir, fileName);
+    const lines = [
+      'From: ' + from,
+      'To: ' + to,
+      cc ? 'Cc: ' + cc : null,
+      'Subject: =?UTF-8?B?' + Buffer.from(subject || '').toString('base64') + '?=',
+      'Date: ' + now.toUTCString(),
+      'MIME-Version: 1.0',
+      'Content-Type: text/html; charset=UTF-8',
+      'Content-Transfer-Encoding: base64',
+      '',
+      Buffer.from(html || body || '').toString('base64')
+    ].filter(Boolean);
+    fs.writeFileSync(fullPath, lines.join('\r\n'), 'utf8');
+    console.log('[Archive-Sent] Saved sent email to ' + fullPath);
+    return fullPath;
+  } catch (err) {
+    console.error('[Archive-Sent] Failed to save sent .eml:', err);
+    return null;
+  }
+}
+
 let maxCacheSize = 500;
 let totalServerMailsCount = 0;
 const SYNC_THROTTLE_MS = 15000; // 15 seconds
@@ -318,11 +354,26 @@ app.get('/api/emails', async (req, res) => {
   const search = (req.query.search || '').trim().toLowerCase();
   const forceRefresh = req.query.forceRefresh === 'true';
   const laterKeysParam = (req.query.laterKeys || '').trim();
+  const folder = (req.query.folder || 'inbox').trim(); // 'inbox' | 'sent' | 'all'
 
   try {
     const allEmails = await syncMailbox(forceRefresh);
 
     let filteredEmails = allEmails;
+    const myMailAddr = (process.env.MAIL_USER || 'taeyoung@ilogen.com').toLowerCase();
+
+    // Filter by folder: inbox (exclude mails sent by me), sent (only mails sent by me)
+    if (folder === 'inbox') {
+      filteredEmails = filteredEmails.filter(email => {
+        const fromLower = (email.from || '').toLowerCase();
+        return !fromLower.includes(myMailAddr);
+      });
+    } else if (folder === 'sent') {
+      filteredEmails = filteredEmails.filter(email => {
+        const fromLower = (email.from || '').toLowerCase();
+        return fromLower.includes(myMailAddr);
+      });
+    }
 
     // Filter by laterKeys if requested
     if (laterKeysParam) {
@@ -1135,6 +1186,16 @@ const handleSendEmail = async (req, res) => {
       text: body,
       html: htmlBody,
       attachments: mailAttachments.length > 0 ? mailAttachments : undefined
+    });
+
+    // Save sent email to local archive
+    saveSentMailToArchive({
+      from: process.env.MAIL_USER || 'taeyoung@ilogen.com',
+      to,
+      cc: finalCc,
+      subject,
+      body,
+      html: htmlBody
     });
 
     res.json({ success: true, messageId: info.messageId });
