@@ -550,6 +550,57 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  // Bind Open in Outlook Button
+  const btnOpenOutlook = document.getElementById('btn-open-outlook');
+  if (btnOpenOutlook) {
+    btnOpenOutlook.addEventListener('click', async () => {
+      if (!selectedEmail) {
+        showToast('먼저 열람할 메일을 선택해주세요.', 'warning');
+        return;
+      }
+      try {
+        btnOpenOutlook.disabled = true;
+        showToast('Outlook 프로그램을 실행 중입니다...', 'info');
+        const res = await fetch(`/api/emails/${selectedEmail.id}/eml/open-outlook`, { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Outlook 실행 실패');
+        showToast('Outlook에서 메일이 열렸습니다.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      } finally {
+        btnOpenOutlook.disabled = false;
+      }
+    });
+  }
+
+  // Bind Download EML Button
+  const btnDownloadEml = document.getElementById('btn-download-eml');
+  if (btnDownloadEml) {
+    btnDownloadEml.addEventListener('click', () => {
+      if (!selectedEmail) {
+        showToast('먼저 다운로드할 메일을 선택해주세요.', 'warning');
+        return;
+      }
+      window.location.href = `/api/emails/${selectedEmail.id}/eml/download`;
+    });
+  }
+
+  // Bind Open Archive Folder Button
+  const btnOpenArchive = document.getElementById('btn-open-archive');
+  if (btnOpenArchive) {
+    btnOpenArchive.addEventListener('click', async () => {
+      try {
+        showToast('로컬 EML 보관함 폴더를 여는 중입니다...', 'info');
+        const res = await fetch('/api/archive/open-folder', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '폴더 열기 실패');
+        showToast('보관함 폴더(Windows 탐색기)가 열렸습니다.', 'success');
+      } catch (err) {
+        showToast(err.message, 'error');
+      }
+    });
+  }
+
   // Auto refresh every 30 minutes (30 * 60 * 1000 ms)
   const AUTO_REFRESH_INTERVAL_MS = 30 * 60 * 1000;
   setInterval(() => {
@@ -1113,7 +1164,13 @@ function renderMailList(emails) {
     let emptySubMessage = '';
     let emptyIcon = 'inbox';
 
-    if (currentMailFilter === 'later') {
+    if (searchQuery) {
+      emptyIcon = 'search-x';
+      emptyMessage = `'${searchQuery}' 검색 결과가 없습니다.`;
+      if (currentMaxCacheSize < serverTotalCount) {
+        emptySubMessage = `현재 최근 ${currentMaxCacheSize}개 메일 내에서 검색되었습니다.`;
+      }
+    } else if (currentMailFilter === 'later') {
       emptyIcon = 'clock';
       emptyMessage = '나중에 회신할 메일이 없습니다.';
       emptySubMessage = '메일의 시계 아이콘이나 상세 보기에서 \'나중에 회신\'을 체크해보세요.';
@@ -1131,9 +1188,31 @@ function renderMailList(emails) {
         <i data-lucide="${emptyIcon}" style="color: var(--text-muted)"></i>
         <p>${emptyMessage}</p>
         ${emptySubMessage ? `<small style="color: var(--text-muted); font-size: 0.75rem;">${emptySubMessage}</small>` : ''}
+        ${searchQuery && currentMaxCacheSize < serverTotalCount ? `
+          <div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 1rem; align-items: center;">
+            <button id="btn-empty-search-all" class="btn-load-more btn-load-more-server" style="width: auto; padding: 0.5rem 1.2rem; font-weight: 600;">
+              <i data-lucide="cloud-search"></i> 서버 전체 메일 검색하기 (전체 동기화)
+            </button>
+            <button id="btn-empty-search-more" class="btn-filter-chip" style="font-size: 0.75rem;">
+              <i data-lucide="plus"></i> 500개씩만 더 찾기
+            </button>
+            <div style="font-size: 0.72rem; color: var(--text-muted); margin-top: 0.2rem;">
+              현재 최근 ${currentMaxCacheSize}개 탐색 완료 / 서버 총 ${serverTotalCount}개
+            </div>
+          </div>
+        ` : ''}
       </div>
     `;
     lucide.createIcons();
+
+    const btnEmptySearchAll = document.getElementById('btn-empty-search-all');
+    if (btnEmptySearchAll) {
+      btnEmptySearchAll.addEventListener('click', () => loadMoreFromServer({ targetSize: 'all' }));
+    }
+    const btnEmptySearchMore = document.getElementById('btn-empty-search-more');
+    if (btnEmptySearchMore) {
+      btnEmptySearchMore.addEventListener('click', () => loadMoreFromServer({ amount: 500 }));
+    }
     return;
   }
 
@@ -1209,22 +1288,40 @@ function renderMailList(emails) {
         fetchEmails(true);
       }
     });
-  } else if (!searchQuery && totalMailCount < serverTotalCount) {
-    // Reached current cache limit (e.g. 500), but server has more!
+  } else if (currentMaxCacheSize < serverTotalCount || totalMailCount < serverTotalCount) {
+    // When searching or browsing, there are more older emails on the server!
     const btnContainer = document.createElement('div');
     btnContainer.className = 'load-more-container';
     btnContainer.style.flexDirection = 'column';
     btnContainer.style.gap = '0.35rem';
-    btnContainer.innerHTML = `
-      <button id="btn-load-more-server" class="btn-load-more btn-load-more-server">
-        <i data-lucide="cloud-download"></i> 서버에서 메일 500개 더 불러오기
-      </button>
-      <div class="server-mail-info" style="font-size: 0.72rem; color: var(--text-muted); text-align: center;">현재 ${totalMailCount}개 / 서버 총 ${serverTotalCount}개</div>
-    `;
-    mailListContainer.appendChild(btnContainer);
-    lucide.createIcons();
 
-    document.getElementById('btn-load-more-server').addEventListener('click', loadMoreFromServer);
+    if (searchQuery) {
+      btnContainer.innerHTML = `
+        <button id="btn-search-all-server" class="btn-load-more btn-load-more-server" style="font-weight: 600;">
+          <i data-lucide="cloud-search"></i> 서버 전체에서 계속 검색하기 (전체 동기화)
+        </button>
+        <button id="btn-search-more-server" class="btn-filter-chip" style="font-size: 0.75rem; align-self: center; margin-top: 0.2rem;">
+          <i data-lucide="plus"></i> 500개씩만 더 찾기
+        </button>
+        <div class="server-mail-info" style="font-size: 0.72rem; color: var(--text-muted); text-align: center;">
+          현재 탐색 범위 ${currentMaxCacheSize}개 / 서버 총 ${serverTotalCount}개
+        </div>
+      `;
+      mailListContainer.appendChild(btnContainer);
+      lucide.createIcons();
+      document.getElementById('btn-search-all-server').addEventListener('click', () => loadMoreFromServer({ targetSize: 'all' }));
+      document.getElementById('btn-search-more-server').addEventListener('click', () => loadMoreFromServer({ amount: 500 }));
+    } else {
+      btnContainer.innerHTML = `
+        <button id="btn-load-more-server" class="btn-load-more btn-load-more-server">
+          <i data-lucide="cloud-download"></i> 서버에서 메일 500개 더 불러오기
+        </button>
+        <div class="server-mail-info" style="font-size: 0.72rem; color: var(--text-muted); text-align: center;">현재 ${totalMailCount}개 / 서버 총 ${serverTotalCount}개</div>
+      `;
+      mailListContainer.appendChild(btnContainer);
+      lucide.createIcons();
+      document.getElementById('btn-load-more-server').addEventListener('click', () => loadMoreFromServer({ amount: 500 }));
+    }
   } else if (emailsList.length > 0) {
     const endContainer = document.createElement('div');
     endContainer.className = 'list-end-marker';

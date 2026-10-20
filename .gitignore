@@ -6,6 +6,7 @@ node_modules/
 
 # Local data cache
 mail_cache.json
+mail_archive/
 
 # Logs
 npm-debug.log*

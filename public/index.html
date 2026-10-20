@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI Mail Assistant</title>
+  <title>메일함</title>
   <!-- Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -107,6 +107,9 @@
             <button id="btn-top-load-more" class="btn-top-sync" title="서버에서 +500개 더 불러오기">
               <i data-lucide="cloud-download"></i> +500
             </button>
+            <button id="btn-open-archive" class="btn-top-sync" title="로컬 EML 보관함 폴더 열기 (Outlook 호환)">
+              <i data-lucide="folder-archive"></i> 보관함
+            </button>
             <button id="btn-mark-all-read" class="btn-mark-all-read" title="모든 메일 읽음으로 표시">
               <i data-lucide="check-check"></i> 모두 읽음
             </button>
@@ -177,6 +180,14 @@
               <div class="mail-header-top-row">
                 <h2 id="detail-subject">제목 없음</h2>
                 <div class="mail-header-actions">
+                  <button type="button" id="btn-open-outlook" class="btn-toggle-later" title="아웃룩(Outlook)으로 직접 열기">
+                    <i data-lucide="mail"></i>
+                    <span>Outlook으로 열기</span>
+                  </button>
+                  <button type="button" id="btn-download-eml" class="btn-toggle-later" title="EML 파일 다운로드 (Outlook 보관용)">
+                    <i data-lucide="download"></i>
+                    <span>EML</span>
+                  </button>
                   <button type="button" id="btn-toggle-mail-later" class="btn-toggle-later" title="나중에 회신하기 표시/해제">
                     <i data-lucide="clock" id="later-toggle-icon"></i>
                     <span id="later-toggle-text">나중에 회신</span>

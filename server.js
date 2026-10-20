@@ -4,6 +4,7 @@ const path = require('path');
 const { simpleParser } = require('mailparser');
 const nodemailer = require('nodemailer');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { exec } = require('child_process');
 const POP3Client = require('./pop3');
 
 const app = express();
@@ -47,6 +48,46 @@ const getPop3Config = () => {
 
 const fs = require('fs');
 const CACHE_FILE = path.join(__dirname, 'mail_cache.json');
+const ARCHIVE_DIR = path.join(__dirname, 'mail_archive');
+if (!fs.existsSync(ARCHIVE_DIR)) {
+  fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
+}
+
+// Helper: Sanitize string for valid Windows file name
+function sanitizeFileName(str) {
+  if (!str) return 'no_subject';
+  return str.replace(/[\\/:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+// Helper: Save raw email text as .eml file in mail_archive
+function saveMailToArchive(rawEmail, uid, dateObj, subject) {
+  try {
+    const d = dateObj instanceof Date && !isNaN(dateObj) ? dateObj : new Date();
+    const yearMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const targetDir = path.join(ARCHIVE_DIR, yearMonth);
+    if (!fs.existsSync(targetDir)) {
+      fs.mkdirSync(targetDir, { recursive: true });
+    }
+
+    const dateStr = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
+    const cleanSubject = sanitizeFileName(subject || '제목없음');
+    const safeUid = sanitizeFileName(uid || String(Date.now()));
+    
+    // Format: YYYYMMDD_HHMM_[Subject]_[UID].eml
+    const fileName = `${dateStr}_${cleanSubject}_${safeUid.slice(-8)}.eml`;
+    const fullPath = path.join(targetDir, fileName);
+
+    if (!fs.existsSync(fullPath)) {
+      fs.writeFileSync(fullPath, rawEmail, 'utf8');
+      console.log(`[Archive] Saved email to ${fullPath}`);
+    }
+    return fullPath;
+  } catch (err) {
+    console.error('[Archive] Failed to save .eml:', err);
+    return null;
+  }
+}
+
 let maxCacheSize = 500;
 let totalServerMailsCount = 0;
 const SYNC_THROTTLE_MS = 15000; // 15 seconds
@@ -340,6 +381,10 @@ app.get('/api/emails/:id', async (req, res) => {
       const parsed = await simpleParser(rawMail);
       await client.quit();
 
+      const uid = msgNumToUidMap[emailId] || '';
+      // Save email as .eml file in local archive
+      const emlPath = saveMailToArchive(rawMail, uid, parsed.date, parsed.subject);
+
       // Extract attachments metadata & cache buffers for download
       const attachments = (parsed.attachments || []).map((att, index) => {
         return {
@@ -359,7 +404,7 @@ app.get('/api/emails/:id', async (req, res) => {
 
       return {
         id: emailId,
-        uniqueId: msgNumToUidMap[emailId] || '',
+        uniqueId: uid,
         subject: parsed.subject || '(No Subject)',
         from: parsed.from ? parsed.from.text : 'Unknown',
         to: parsed.to ? parsed.to.text : 'Unknown',
@@ -367,7 +412,8 @@ app.get('/api/emails/:id', async (req, res) => {
         date: parsed.date ? parsed.date.toISOString() : new Date().toISOString(),
         text: parsed.text || '',
         html: parsed.html || parsed.text || '',
-        attachments: attachments
+        attachments: attachments,
+        emlPath: emlPath || ''
       };
     });
 
@@ -420,6 +466,113 @@ app.get('/api/emails/:id/attachments/:attId', async (req, res) => {
   } catch (err) {
     console.error('Attachment download error:', err);
     res.status(500).send(`Failed to download attachment: ${err.message}`);
+  }
+});
+
+// Helper: Find .eml file path in ARCHIVE_DIR by uniqueId
+function findArchivedEmlPath(uniqueId) {
+  if (!uniqueId || !fs.existsSync(ARCHIVE_DIR)) return null;
+  const safeUidSuffix = sanitizeFileName(uniqueId).slice(-8);
+
+  const subdirs = fs.readdirSync(ARCHIVE_DIR);
+  for (const subdir of subdirs) {
+    const subpath = path.join(ARCHIVE_DIR, subdir);
+    if (fs.statSync(subpath).isDirectory()) {
+      const files = fs.readdirSync(subpath);
+      const matched = files.find(f => f.endsWith(`_${safeUidSuffix}.eml`));
+      if (matched) {
+        return path.join(subpath, matched);
+      }
+    }
+  }
+  return null;
+}
+
+// API: Download .eml file for an email
+app.get('/api/emails/:id/eml/download', async (req, res) => {
+  const emailId = parseInt(req.params.id, 10);
+  const uid = msgNumToUidMap[emailId] || '';
+
+  try {
+    let emlPath = findArchivedEmlPath(uid);
+    if (!emlPath) {
+      // Fetch full raw email from POP3 if not already in local archive
+      await runWithPop3Lock(async () => {
+        const config = getPop3Config();
+        const client = new POP3Client(config);
+        await client.connect();
+        await client.login();
+        const rawMail = await client.getMail(emailId);
+        const parsed = await simpleParser(rawMail);
+        await client.quit();
+        emlPath = saveMailToArchive(rawMail, uid, parsed.date, parsed.subject);
+      });
+    }
+
+    if (!emlPath || !fs.existsSync(emlPath)) {
+      return res.status(404).send('EML file could not be generated.');
+    }
+
+    const downloadFileName = path.basename(emlPath);
+    const encoded = encodeURIComponent(downloadFileName);
+    res.setHeader('Content-Type', 'message/rfc822');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encoded}`);
+    res.sendFile(emlPath);
+  } catch (err) {
+    console.error('Failed to download .eml:', err);
+    res.status(500).send(`Failed to download .eml: ${err.message}`);
+  }
+});
+
+// API: Open .eml file directly in Outlook (Windows default mail client)
+app.post('/api/emails/:id/eml/open-outlook', async (req, res) => {
+  const emailId = parseInt(req.params.id, 10);
+  const uid = msgNumToUidMap[emailId] || '';
+
+  try {
+    let emlPath = findArchivedEmlPath(uid);
+    if (!emlPath) {
+      // Fetch full raw email from POP3 if not already in local archive
+      await runWithPop3Lock(async () => {
+        const config = getPop3Config();
+        const client = new POP3Client(config);
+        await client.connect();
+        await client.login();
+        const rawMail = await client.getMail(emailId);
+        const parsed = await simpleParser(rawMail);
+        await client.quit();
+        emlPath = saveMailToArchive(rawMail, uid, parsed.date, parsed.subject);
+      });
+    }
+
+    if (!emlPath || !fs.existsSync(emlPath)) {
+      return res.status(404).json({ error: 'EML file could not be found.' });
+    }
+
+    // Launch .eml via Windows shell (opens in default Outlook app)
+    exec(`start "" "${emlPath}"`, (error) => {
+      if (error) {
+        console.error('Failed to open Outlook:', error);
+        return res.status(500).json({ error: 'Failed to open Outlook application.' });
+      }
+      res.json({ success: true, message: 'Outlook opened successfully.', path: emlPath });
+    });
+  } catch (err) {
+    console.error('Failed to open in Outlook:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// API: Open mail_archive directory in Windows Explorer
+app.post('/api/archive/open-folder', (req, res) => {
+  try {
+    if (!fs.existsSync(ARCHIVE_DIR)) {
+      fs.mkdirSync(ARCHIVE_DIR, { recursive: true });
+    }
+    exec(`explorer.exe "${ARCHIVE_DIR}"`);
+    res.json({ success: true, path: ARCHIVE_DIR });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
