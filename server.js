@@ -355,6 +355,7 @@ app.get('/api/emails', async (req, res) => {
   const forceRefresh = req.query.forceRefresh === 'true';
   const laterKeysParam = (req.query.laterKeys || '').trim();
   const folder = (req.query.folder || 'inbox').trim(); // 'inbox' | 'sent' | 'all'
+  const hideNotice = req.query.hideNotice === 'true';
 
   try {
     const allEmails = await syncMailbox(forceRefresh);
@@ -372,6 +373,14 @@ app.get('/api/emails', async (req, res) => {
       filteredEmails = filteredEmails.filter(email => {
         const fromLower = (email.from || '').toLowerCase();
         return fromLower.includes(myMailAddr);
+      });
+    }
+
+    // Filter out groupware auto status notices if requested
+    if (hideNotice) {
+      filteredEmails = filteredEmails.filter(email => {
+        const subj = (email.subject || '').trim();
+        return !subj.startsWith('[수신문서완료]') && !subj.startsWith('[문서완료]');
       });
     }
 

@@ -559,7 +559,7 @@ document.addEventListener('DOMContentLoaded', () => {
         console.warn('Failed to save mail_hide_system_notice', e);
       }
       showToast(isHideSystemNotice ? '상태처리 자동 알림 메일을 숨겼습니다.' : '상태처리 자동 알림 메일을 다시 표시합니다.', 'info');
-      renderMailList(emailsList);
+      fetchEmails(false);
     });
   }
 
@@ -811,7 +811,7 @@ async function fetchEmails(append = false, forceRefresh = false, options = {}) {
       const effectiveLimit = isSilent ? (currentPage * limitPerPage) : limitPerPage;
       const targetPage = isSilent ? 1 : currentPage;
       const folderParam = (currentMailFilter === 'sent') ? 'sent' : (currentMailFilter === 'all' ? 'all' : 'inbox');
-      url = `/api/emails?page=${targetPage}&limit=${effectiveLimit}&folder=${folderParam}`;
+      url = `/api/emails?page=${targetPage}&limit=${effectiveLimit}&folder=${folderParam}&hideNotice=${isHideSystemNotice}`;
     }
 
     if (searchQuery) {
